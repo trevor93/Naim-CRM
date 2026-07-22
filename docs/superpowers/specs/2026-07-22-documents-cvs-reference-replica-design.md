@@ -162,9 +162,9 @@ Keep `DocumentsPage` focused on page-level composition and state. Use the follow
 - `src/components/documents/CVDraftsSection.jsx` — selection state and draft-list composition;
 - `src/components/documents/CVDraftRow.jsx` — one row’s visual structure and actions;
 - `src/components/documents/CVUploadButton.jsx` — regular/camera input behavior;
-- `src/data/cvDraftFixtures.js` — deterministic 17-row reference content separated from rendering code.
+- `src/services/demoData.js` — deterministic 17-row reference content used only when Supabase is not configured.
 
-Fixture data must not be embedded as an unreadable block inside the page component.
+Fixture data must not be embedded as an unreadable block inside the page component. When Supabase is configured, `DocumentsPage` loads documents and CV drafts through the existing services instead of mixing demo rows into production data.
 
 ## 10. Visual Specification
 
@@ -203,14 +203,15 @@ Responsive adjustments must not change the desktop geometry used for screenshot 
 
 For the approved first preview:
 
-- render all 17 reference rows from deterministic local fixtures;
+- when `isSupabaseConfigured` is false, render all 17 reference rows from `src/services/demoData.js`;
+- when `isSupabaseConfigured` is true, load CV documents through `getDocuments()` and drafts through `getCVDrafts()`;
+- keep demo fixtures out of production/Supabase mode;
 - do not represent fixture names as production candidates;
-- do not require Supabase to display the complete reference state;
-- do not clear or delete production Supabase records from demo controls;
-- retain existing Supabase service files for future integration;
-- avoid candidate-ID requirements in the reference-matching upload controls.
+- in demo mode, clear and delete actions update local state only;
+- in Supabase mode, mutations use the existing `documentService` and `cvDraftService` functions after confirmation;
+- avoid candidate-ID requirements in demo-mode upload controls; Supabase-mode uploads continue to use the existing document-service contract and must request or derive a candidate ID before upload.
 
-After the visual preview, the user will decide which sample rows, controls, or behaviors to remove or connect to live data.
+After the visual preview, the user will decide which sample rows or controls to remove.
 
 ## 13. Error Handling and Feedback
 
