@@ -27,3 +27,6 @@ mcp-server/.env
 *.njsproj
 *.sln
 *.sw?
+
+# Local Superpowers visual brainstorming sessions
+.superpowers/
