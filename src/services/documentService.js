@@ -12,8 +12,8 @@ export async function getDocuments({ candidateId, documentType } = {}) {
   return data
 }
 
-export async function uploadDocument(file, candidateId, documentType) {
-  const filePath = `${candidateId}/${Date.now()}_${file.name}`
+export async function uploadDocument(file, candidateId, documentType, source = 'manual') {
+  const filePath = `${candidateId}/${source}/${Date.now()}_${file.name}`
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(filePath, file)
   if (uploadError) throw uploadError
 
@@ -28,25 +28,43 @@ export async function uploadDocument(file, candidateId, documentType) {
     file_size: file.size,
     mime_type: file.type,
   }).select().single()
+  if (error) {
+    try {
+      const { error: rollbackError } = await supabase.storage.from(BUCKET).remove([filePath])
+      void rollbackError
+    } catch {
+      // Preserve the database error that made the rollback necessary.
+    }
+    throw error
+  }
+  return data
+}
+
+export async function updateDocument(id, updates) {
+  const { data, error } = await supabase.from(TABLE).update(updates).eq('id', id).select().single()
   if (error) throw error
   return data
 }
 
 export async function deleteDocument(id, filePath) {
-  if (filePath) {
-    await supabase.storage.from(BUCKET).remove([filePath])
-  }
   const { error } = await supabase.from(TABLE).delete().eq('id', id)
   if (error) throw error
+
+  if (filePath) {
+    const { error: storageError } = await supabase.storage.from(BUCKET).remove([filePath])
+    if (storageError) throw storageError
+  }
 }
 
 export async function downloadDocument(filePath, fileName) {
   const { data, error } = await supabase.storage.from(BUCKET).download(filePath)
   if (error) throw error
   const url = URL.createObjectURL(data)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  URL.revokeObjectURL(url)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }

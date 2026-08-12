@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, FileText, Folder, UserPlus, Eye, CheckSquare,
+  LayoutDashboard, Users, Folder, UserPlus, Eye, CheckSquare,
   Calendar, Briefcase, Plus, BarChart3, Settings, Trash2, Menu, FileEdit
 } from 'lucide-react'
 
@@ -39,10 +39,14 @@ export default function Sidebar({ expanded, onToggle }) {
         </button>
       </div>
 
-      {/* NI Logo */}
+      {/* Naim Agency logo */}
       <div className="flex items-center px-2.5 pb-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white shadow-sm">
-          NI
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-black shadow-sm">
+          <img
+            src="/assets/naim-agency-logo.webp"
+            alt="Naim Agency logo"
+            className="h-full w-full object-contain"
+          />
         </div>
         {expanded && (
           <span className="ml-2 truncate text-sm font-bold text-primary">Naim Investments</span>

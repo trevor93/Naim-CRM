@@ -227,6 +227,25 @@ CREATE POLICY "Authenticated users can update jobs" ON jobs
 CREATE POLICY "Authenticated users can delete jobs" ON jobs
   FOR DELETE TO authenticated USING (true);
 
+-- Migration 2026-07-24: Jobs extended fields (Job Openings reference page)
+ALTER TABLE jobs
+  ADD COLUMN IF NOT EXISTS gender TEXT,
+  ADD COLUMN IF NOT EXISTS city TEXT,
+  ADD COLUMN IF NOT EXISTS company TEXT,
+  ADD COLUMN IF NOT EXISTS experience TEXT,
+  ADD COLUMN IF NOT EXISTS accommodation TEXT,
+  ADD COLUMN IF NOT EXISTS age_range TEXT,
+  ADD COLUMN IF NOT EXISTS nationality TEXT,
+  ADD COLUMN IF NOT EXISTS duty_hours TEXT,
+  ADD COLUMN IF NOT EXISTS work_days TEXT,
+  ADD COLUMN IF NOT EXISTS overtime TEXT,
+  ADD COLUMN IF NOT EXISTS transport TEXT,
+  ADD COLUMN IF NOT EXISTS contract_period TEXT,
+  ADD COLUMN IF NOT EXISTS vacancies_left INTEGER,
+  ADD COLUMN IF NOT EXISTS linked_candidates INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS uploads TEXT,
+  ADD COLUMN IF NOT EXISTS additional_details TEXT;
+
 -- Appointments: authenticated users can read/write
 CREATE POLICY "Authenticated users can manage appointments" ON appointments
   FOR ALL TO authenticated USING (true);

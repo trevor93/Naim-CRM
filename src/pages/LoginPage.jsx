@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import { Building2, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false)
@@ -40,8 +40,12 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-cream-light via-beige to-cream p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg">
-            <Building2 className="h-8 w-8 text-white" />
+          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-black shadow-lg sm:h-28 sm:w-28">
+            <img
+              src="/assets/naim-agency-logo.webp"
+              alt="Naim Agency logo"
+              className="h-full w-full object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Naim CRM App</h1>
           <p className="mt-1 text-sm text-text-secondary">Recruitment Management System</p>

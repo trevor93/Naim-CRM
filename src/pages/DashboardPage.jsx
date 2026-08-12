@@ -9,8 +9,8 @@ import {
 } from 'lucide-react'
 import { isSupabaseConfigured } from '../supabase/client'
 import { getCandidates, updateCandidate } from '../services/candidateService'
-import { getJobs } from '../services/jobService'
-import { getTasks, getTaskCounts } from '../services/taskService'
+import { getJobs, updateJob } from '../services/jobService'
+import { getTasks, getTaskCounts, updateTask } from '../services/taskService'
 import { demoCandidates, demoTotalCandidates, demoJobs, demoTasks } from '../services/demoData'
 
 const CANDIDATE_STATUSES = [
@@ -21,18 +21,18 @@ const CANDIDATE_STATUSES = [
   { label: 'Rejected', dot: 'bg-red-500', badge: 'bg-red-100 text-red-700' },
 ]
 
-const JOB_STATUS_STYLES = {
-  Active: 'bg-green-100 text-green-700',
-  Closed: 'bg-gray-200 text-gray-600',
-  Draft: 'bg-slate-100 text-slate-600',
-}
+const JOB_STATUSES = [
+  { label: 'Active', dot: 'bg-green-500', badge: 'border-green-200 bg-green-100 text-green-700' },
+  { label: 'Closed', dot: 'bg-gray-400', badge: 'border-gray-200 bg-gray-50 text-gray-900' },
+  { label: 'Draft', dot: 'bg-yellow-400', badge: 'border-[#fde68a] bg-yellow-100 text-yellow-800' },
+]
 
-const TASK_STATUS_STYLES = {
-  Completed: 'bg-green-100 text-green-700',
-  'In Progress': 'bg-blue-100 text-blue-700',
-  Pending: 'bg-yellow-100 text-yellow-700',
-  Overdue: 'bg-red-100 text-red-700',
-}
+const TASK_STATUSES = [
+  { label: 'Pending', dot: 'bg-yellow-400', badge: 'border-[#fde68a] bg-yellow-100 text-yellow-700' },
+  { label: 'In Progress', dot: 'bg-blue-400', badge: 'border-blue-200 bg-blue-100 text-blue-700' },
+  { label: 'Completed', dot: 'bg-green-500', badge: 'border-green-200 bg-green-100 text-green-700' },
+  { label: 'Overdue', dot: 'bg-red-400', badge: 'border-red-200 bg-red-100 text-red-600' },
+]
 
 const QUICK_ACTIONS = [
   { label: 'Search Candidate', icon: Search, to: '/candidates' },
@@ -81,6 +81,134 @@ function StatusDropdown({ value, onChange }) {
             >
               <span className={`h-2 w-2 rounded-full ${s.dot}`} />
               {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function JobStatusDropdown({ job, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const current = JOB_STATUSES.find((status) => status.label === job.status) || JOB_STATUSES[1]
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        aria-label={`Status for ${job.title}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        className={`flex min-w-[70px] items-center justify-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${current.badge}`}
+      >
+        {current.label}
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label={`Status options for ${job.title}`}
+          className="absolute right-0 top-full z-30 mt-1 w-[150px] overflow-hidden border border-gray-100 bg-white py-0.5 shadow-[0_8px_18px_rgba(0,0,0,0.10)] animate-scale-in sm:left-0 sm:right-auto"
+        >
+          {JOB_STATUSES.map((status) => (
+            <button
+              key={status.label}
+              type="button"
+              role="menuitem"
+              data-selected={status.label === current.label}
+              onClick={() => {
+                onChange(status.label)
+                setOpen(false)
+              }}
+              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-gray-900 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none ${status.label === current.label ? 'bg-gray-50' : 'bg-white'}`}
+            >
+              <span data-status-dot className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
+              {status.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TaskStatusDropdown({ task, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const current = TASK_STATUSES.find((status) => status.label === task.status) || TASK_STATUSES[0]
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        aria-label={`Status for ${task.title}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        className={`flex min-w-[82px] items-center justify-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${current.badge}`}
+      >
+        {current.label}
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label={`Status options for ${task.title}`}
+          className="absolute right-0 top-full z-30 mt-1 w-[150px] overflow-hidden border border-gray-100 bg-white py-0.5 shadow-[0_8px_18px_rgba(0,0,0,0.10)] animate-scale-in"
+        >
+          {TASK_STATUSES.map((status) => (
+            <button
+              key={status.label}
+              type="button"
+              role="menuitem"
+              data-selected={status.label === current.label}
+              onClick={() => {
+                onChange(status.label)
+                setOpen(false)
+              }}
+              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-gray-900 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none ${status.label === current.label ? 'bg-gray-50' : 'bg-white'}`}
+            >
+              <span data-status-dot className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
+              {status.label}
             </button>
           ))}
         </div>
@@ -173,6 +301,56 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleJobStatusChange(jobId, newStatus) {
+    const previousStatus = jobs.find((job) => job.id === jobId)?.status
+    if (!previousStatus || previousStatus === newStatus) return
+
+    setJobs((currentJobs) => currentJobs.map((job) => (
+      job.id === jobId ? { ...job, status: newStatus } : job
+    )))
+
+    if (isSupabaseConfigured) {
+      try {
+        await updateJob(jobId, { status: newStatus })
+      } catch (err) {
+        setJobs((currentJobs) => currentJobs.map((job) => (
+          job.id === jobId ? { ...job, status: previousStatus } : job
+        )))
+        console.error('Job status update error:', err)
+      }
+    }
+  }
+
+  async function handleTaskStatusChange(taskId, newStatus) {
+    const previousStatus = tasks.find((task) => task.id === taskId)?.status
+    if (!previousStatus || previousStatus === newStatus) return
+
+    setTasks((currentTasks) => currentTasks.map((task) => (
+      task.id === taskId ? { ...task, status: newStatus } : task
+    )))
+    setTaskCounts((currentCounts) => ({
+      ...currentCounts,
+      [previousStatus]: Math.max(0, (currentCounts[previousStatus] || 0) - 1),
+      [newStatus]: (currentCounts[newStatus] || 0) + 1,
+    }))
+
+    if (isSupabaseConfigured) {
+      try {
+        await updateTask(taskId, { status: newStatus })
+      } catch (err) {
+        setTasks((currentTasks) => currentTasks.map((task) => (
+          task.id === taskId ? { ...task, status: previousStatus } : task
+        )))
+        setTaskCounts((currentCounts) => ({
+          ...currentCounts,
+          [newStatus]: Math.max(0, (currentCounts[newStatus] || 0) - 1),
+          [previousStatus]: (currentCounts[previousStatus] || 0) + 1,
+        }))
+        console.error('Task status update error:', err)
+      }
+    }
+  }
+
   if (loading) return <Layout title="Admin Dashboard"><PageSpinner /></Layout>
 
   const summaryCards = [
@@ -185,6 +363,23 @@ export default function DashboardPage() {
   return (
     <Layout title="Admin Dashboard">
       <div className="space-y-6 animate-fade-in">
+
+        {/* ── Task Summary ──────────────────────────────── */}
+        <section id="task-summary" className="rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-primary">
+            <CheckSquare className="h-5 w-5" />
+            Task Summary
+            <span className="text-xs font-normal text-gray-400">(Live Data)</span>
+          </h2>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {summaryCards.map((card) => (
+              <div key={card.label} className={`rounded-xl border p-4 text-center ${card.style}`}>
+                <p className={`text-2xl font-bold ${card.text}`}>{card.value}</p>
+                <p className={`mt-1 text-sm font-medium ${card.text}`}>{card.label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* ── Quick Actions ─────────────────────────────── */}
         <section id="quick-actions" className="rounded-2xl bg-white p-5 shadow-sm">
@@ -279,9 +474,7 @@ export default function DashboardPage() {
                     Posted {new Date(j.posted_date || j.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
-                <span className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[j.status] || 'bg-gray-100 text-gray-600'}`}>
-                  {j.status} <ChevronDown className="h-3 w-3" />
-                </span>
+                <JobStatusDropdown job={j} onChange={(status) => handleJobStatusChange(j.id, status)} />
               </article>
             ))}
             {jobs.length === 0 && (
@@ -314,9 +507,7 @@ export default function DashboardPage() {
                     Due: {t.due_date} <span className="mx-1 text-gray-300">•</span> By: {t.created_by || 'Admin'}
                   </p>
                 </div>
-                <span className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${TASK_STATUS_STYLES[t.status] || 'bg-gray-100 text-gray-600'}`}>
-                  {t.status} <ChevronDown className="h-3 w-3" />
-                </span>
+                <TaskStatusDropdown task={t} onChange={(status) => handleTaskStatusChange(t.id, status)} />
               </article>
             ))}
             {tasks.length === 0 && (
@@ -325,22 +516,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* ── Task Summary ──────────────────────────────── */}
-        <section id="task-summary" className="rounded-2xl bg-white p-5 shadow-sm">
-          <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-primary">
-            <CheckSquare className="h-5 w-5" />
-            Task Summary
-            <span className="text-xs font-normal text-gray-400">(Live Data)</span>
-          </h2>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {summaryCards.map((card) => (
-              <div key={card.label} className={`rounded-xl border p-4 text-center ${card.style}`}>
-                <p className={`text-2xl font-bold ${card.text}`}>{card.value}</p>
-                <p className={`mt-1 text-sm font-medium ${card.text}`}>{card.label}</p>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
     </Layout>
   )

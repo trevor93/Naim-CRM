@@ -1,175 +1,223 @@
-import { useState, useEffect } from 'react'
+import { useRef, useState } from 'react'
 import Layout from '../components/layout/Layout'
-import Card, { CardTitle, CardContent } from '../components/ui/Card'
-import Button from '../components/ui/Button'
-import Input from '../components/ui/Input'
-import Select from '../components/ui/Select'
-import Tabs from '../components/ui/Tabs'
-import Table from '../components/ui/Table'
-import Badge from '../components/ui/Badge'
-import Modal from '../components/ui/Modal'
-import { useAuth } from '../contexts/AuthContext'
+import AccountInformationCard from '../components/settings/AccountInformationCard'
+import AddUserModal from '../components/settings/AddUserModal'
+import ApplicationSettingsCard from '../components/settings/ApplicationSettingsCard'
+import ChangePasswordModal from '../components/settings/ChangePasswordModal'
+import NotificationPreferencesCard from '../components/settings/NotificationPreferencesCard'
+import ProfileInformationCard from '../components/settings/ProfileInformationCard'
+import SecuritySettingsCard from '../components/settings/SecuritySettingsCard'
+import SettingsConfirmationModal from '../components/settings/SettingsConfirmationModal'
+import SettingsManagementCard from '../components/settings/SettingsManagementCard'
+import SettingsSaveBanner from '../components/settings/SettingsSaveBanner'
+import UserManagementCard from '../components/settings/UserManagementCard'
+import { toExportableSettings } from '../components/settings/settingsModel'
+import { importSettings, readSettings, resetSettings, writeSettings } from '../services/settingsService'
 import { useToast } from '../contexts/ToastContext'
-import { getAppSettings, updateAppSettings, getUsers, updateUserProfile } from '../services/settingsService'
-import { COUNTRIES, CURRENCIES, USER_ROLES, PAGE_ACCESS_OPTIONS } from '../utils/constants'
-import { Settings, Shield, Users, Palette, Download, Upload } from 'lucide-react'
 
 export default function SettingsPage() {
   const toast = useToast()
-  const { user, userProfile, updateProfile } = useAuth()
-  const [tab, setTab] = useState('application')
-  const [settings, setSettings] = useState({})
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showUserModal, setShowUserModal] = useState(false)
-  const [editUser, setEditUser] = useState(null)
-  const [userForm, setUserForm] = useState({ display_name: '', role: 'user', page_permissions: [] })
+  const [settings, setSettings] = useState(() => readSettings())
+  const [saved, setSaved] = useState(true)
+  const [profileError, setProfileError] = useState('')
+  const [userModal, setUserModal] = useState({ open: false, user: null })
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [confirmation, setConfirmation] = useState(null)
+  const importInputRef = useRef(null)
 
-  useEffect(() => { loadSettings(); loadUsers() }, [])
-
-  async function loadSettings() {
-    const s = await getAppSettings()
-    setSettings(s)
-    setLoading(false)
+  function persist(next) {
+    setSaved(false)
+    const normalized = writeSettings(next)
+    setSettings(normalized)
+    setSaved(true)
+    return normalized
   }
 
-  async function loadUsers() {
-    try { const u = await getUsers(); setUsers(u) } catch {}
+  function updateApplication(field, value) {
+    persist({
+      ...settings,
+      application: { ...settings.application, [field]: value },
+    })
   }
 
-  async function saveSettings() {
-    try { await updateAppSettings(settings); toast.success('Settings saved!') }
-    catch { toast.error('Failed to save') }
+  function updateNotification(field, value) {
+    persist({
+      ...settings,
+      notifications: { ...settings.notifications, [field]: value },
+    })
   }
 
-  function togglePagePermission(page) {
-    const perms = userForm.page_permissions || []
-    const updated = perms.includes(page) ? perms.filter((p) => p !== page) : [...perms, page]
-    setUserForm({ ...userForm, page_permissions: updated })
+  function updateAutoLogout(value) {
+    persist({
+      ...settings,
+      security: { ...settings.security, autoLogout: value },
+    })
   }
 
-  async function handleUserSave() {
-    if (!editUser) return
-    try {
-      await updateUserProfile(editUser.id, { role: userForm.role, page_permissions: userForm.page_permissions, display_name: userForm.display_name })
-      toast.success('User updated!')
-      setShowUserModal(false); loadUsers()
-    } catch (err) { toast.error(err.message) }
+  function handleProfileSubmit(event) {
+    event.preventDefault()
+    if (!settings.profile.fullName.trim()) {
+      setProfileError('Full name is required')
+      return
+    }
+    setProfileError('')
+    persist({
+      ...settings,
+      profile: { fullName: settings.profile.fullName.trim() },
+    })
+    toast.success('Profile updated!')
   }
 
-  const tabs = [
-    { id: 'application', label: 'Application', icon: Settings },
-    { id: 'users', label: 'User Management', icon: Users },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'export', label: 'Export/Import', icon: Download },
-  ]
+  function handleUserSave(user) {
+    const exists = settings.users.some((candidate) => candidate.id === user.id)
+    const users = exists
+      ? settings.users.map((candidate) => candidate.id === user.id ? user : candidate)
+      : [...settings.users, user]
+    persist({ ...settings, users })
+    setUserModal({ open: false, user: null })
+    toast.success('User saved!')
+  }
 
-  const userColumns = [
-    { header: 'Name', render: (r) => <p className="font-medium">{r.display_name || 'No name'}</p> },
-    { header: 'Role', render: (r) => <Badge variant={r.role === 'admin' ? 'primary' : r.role === 'manager' ? 'info' : 'default'}>{r.role}</Badge> },
-    { header: '', render: (r) => (
-      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditUser(r); setUserForm(r); setShowUserModal(true) }}>Edit</Button>
-    )},
-  ]
+  function requestDeleteUser(user) {
+    setConfirmation({
+      type: 'delete-user',
+      user,
+      title: 'Delete User',
+      description: 'This removes the locally saved user from Settings.',
+      confirmLabel: 'Delete User',
+    })
+  }
 
-  function exportSettings() {
-    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' })
+  function requestReset() {
+    setConfirmation({
+      type: 'reset',
+      title: 'Reset Settings',
+      description: 'This restores the screenshot defaults and removes locally added users.',
+      confirmLabel: 'Reset to Defaults',
+    })
+  }
+
+  function handleConfirm() {
+    if (confirmation?.type === 'delete-user') {
+      persist({
+        ...settings,
+        users: settings.users.filter((user) => user.id !== confirmation.user.id),
+      })
+      toast.success('User deleted!')
+    } else if (confirmation?.type === 'reset') {
+      setSettings(resetSettings())
+      setProfileError('')
+      setSaved(true)
+      toast.success('Settings reset to defaults')
+    }
+    setConfirmation(null)
+  }
+
+  function handleExport() {
+    const blob = new Blob([JSON.stringify(toExportableSettings(settings), null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'naim-crm-settings.json'; a.click()
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'naim-crm-settings.json'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
     toast.success('Settings exported!')
   }
 
-  function importSettings(e) {
-    const file = e.target.files?.[0]
+  async function handleImport(event) {
+    const file = event.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const imported = JSON.parse(ev.target.result)
-        setSettings(imported); updateAppSettings(imported); toast.success('Settings imported!')
-      } catch { toast.error('Invalid JSON file') }
+    try {
+      const imported = JSON.parse(await file.text())
+      setSettings(importSettings(imported))
+      setProfileError('')
+      setSaved(true)
+      toast.success('Settings imported!')
+    } catch {
+      toast.error('Invalid settings file')
+    } finally {
+      event.target.value = ''
     }
-    reader.readAsText(file)
   }
 
   return (
-    <Layout title="Settings">
-      <div className="space-y-6 animate-fade-in">
-        <Tabs tabs={tabs} defaultTab={tab} onChange={setTab} />
+    <Layout title="Admin Dashboard">
+      <section className="min-w-0 space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-2xl font-bold text-primary sm:text-3xl">Settings</h1>
+          <p className="mt-1 text-sm text-text-secondary sm:text-base">Manage your account settings and preferences</p>
+        </div>
 
-        {tab === 'application' && (
-          <Card>
-            <CardTitle>Application Settings</CardTitle>
-            <CardContent className="mt-4 space-y-4">
-              <Input label="Application Name" value={settings.app_name || ''} onChange={(e) => setSettings({ ...settings, app_name: e.target.value })} />
-              <div className="grid grid-cols-2 gap-4">
-                <Select label="Default Country" value={settings.default_country || ''} onChange={(e) => setSettings({ ...settings, default_country: e.target.value })} options={COUNTRIES} />
-                <Select label="Default Currency" value={settings.default_currency || ''} onChange={(e) => setSettings({ ...settings, default_currency: e.target.value })} options={CURRENCIES.map((c) => c.code)} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Data Retention (days)" type="number" value={settings.data_retention_days || ''} onChange={(e) => setSettings({ ...settings, data_retention_days: parseInt(e.target.value) })} />
-                <Input label="Auto-Logout (minutes)" type="number" value={settings.auto_logout_minutes || ''} onChange={(e) => setSettings({ ...settings, auto_logout_minutes: parseInt(e.target.value) })} />
-              </div>
-              <Button onClick={saveSettings}>Save Settings</Button>
-            </CardContent>
-          </Card>
-        )}
+        <SettingsSaveBanner saved={saved} />
 
-        {tab === 'users' && (
-          <Card>
-            <CardTitle>User Management</CardTitle>
-            <Table columns={userColumns} data={users} emptyMessage="No users found." />
-          </Card>
-        )}
+        <UserManagementCard
+          users={settings.users}
+          onAdd={() => setUserModal({ open: true, user: null })}
+          onEdit={(user) => setUserModal({ open: true, user })}
+          onDelete={requestDeleteUser}
+        />
 
-        {tab === 'security' && (
-          <Card>
-            <CardTitle>Security Settings</CardTitle>
-            <CardContent className="mt-4 space-y-4">
-              <p className="text-sm text-text-secondary">Password management and session controls are handled through Supabase Auth.</p>
-              <Input label="Session Timeout (minutes)" type="number" value={settings.auto_logout_minutes || 30} onChange={(e) => setSettings({ ...settings, auto_logout_minutes: parseInt(e.target.value) })} />
-              <Button onClick={saveSettings}>Save</Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {tab === 'export' && (
-          <Card>
-            <CardTitle>Export / Import Settings</CardTitle>
-            <CardContent className="mt-4 space-y-4">
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={exportSettings}><Download className="h-4 w-4" /> Export Settings</Button>
-                <div>
-                  <input type="file" accept=".json" onChange={importSettings} className="hidden" id="import-settings" />
-                  <Button variant="outline" onClick={() => document.getElementById('import-settings').click()}><Upload className="h-4 w-4" /> Import Settings</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      <Modal isOpen={showUserModal} onClose={() => setShowUserModal(false)} title="Edit User">
-        <div className="space-y-4">
-          <Input label="Display Name" value={userForm.display_name || ''} onChange={(e) => setUserForm({ ...userForm, display_name: e.target.value })} />
-          <Select label="Role" value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} options={USER_ROLES} />
-          <div>
-            <p className="mb-2 text-sm font-medium text-text-secondary">Page Access</p>
-            <div className="grid grid-cols-2 gap-2">
-              {PAGE_ACCESS_OPTIONS.map((page) => (
-                <label key={page} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={(userForm.page_permissions || []).includes(page)} onChange={() => togglePagePermission(page)} className="rounded border-cream" />
-                  <span className="capitalize">{page.replace(/-/g, ' ')}</span>
-                </label>
-              ))}
-            </div>
+        <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,2.08fr)_minmax(300px,1fr)]">
+          <div className="min-w-0 space-y-6">
+            <ProfileInformationCard
+              fullName={settings.profile.fullName}
+              onFullNameChange={(fullName) => {
+                setProfileError('')
+                setSettings((current) => ({ ...current, profile: { fullName } }))
+                setSaved(false)
+              }}
+              onSubmit={handleProfileSubmit}
+              error={profileError}
+            />
+            <SecuritySettingsCard
+              autoLogout={settings.security.autoLogout}
+              onAutoLogoutChange={updateAutoLogout}
+              onChangePassword={() => setPasswordOpen(true)}
+              onEnable2FA={() => toast.info('Two-factor authentication is coming soon')}
+            />
+            <NotificationPreferencesCard
+              notifications={settings.notifications}
+              onChange={updateNotification}
+            />
           </div>
-          <div className="flex justify-end gap-3 border-t border-cream pt-4">
-            <Button variant="ghost" onClick={() => setShowUserModal(false)}>Cancel</Button>
-            <Button onClick={handleUserSave}>Save</Button>
+
+          <div className="min-w-0 space-y-6">
+            <ApplicationSettingsCard application={settings.application} onChange={updateApplication} />
+            <AccountInformationCard />
+            <SettingsManagementCard
+              onExport={handleExport}
+              onImport={handleImport}
+              onReset={requestReset}
+              importInputRef={importInputRef}
+            />
           </div>
         </div>
-      </Modal>
+      </section>
+
+      <AddUserModal
+        isOpen={userModal.open}
+        user={userModal.user}
+        onClose={() => setUserModal({ open: false, user: null })}
+        onSave={handleUserSave}
+      />
+      <ChangePasswordModal
+        isOpen={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        onSuccess={() => {
+          setPasswordOpen(false)
+          toast.success('Password updated securely')
+        }}
+      />
+      <SettingsConfirmationModal
+        isOpen={Boolean(confirmation)}
+        title={confirmation?.title || ''}
+        description={confirmation?.description || ''}
+        confirmLabel={confirmation?.confirmLabel || ''}
+        onClose={() => setConfirmation(null)}
+        onConfirm={handleConfirm}
+      />
     </Layout>
   )
 }

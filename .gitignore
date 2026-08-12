@@ -30,3 +30,20 @@ mcp-server/.env
 
 # Local Superpowers visual brainstorming sessions
 .superpowers/
+
+# Generated verification output
+/test-results/
+/artifacts/*.png
+/artifacts/*.jpg
+/artifacts/*.jpeg
+/artifacts/*.webp
+/artifacts/*.json
+/artifacts/*.txt
+/artifacts/*-downloads/
+/artifacts/trace-*.mjs
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.log
+*.bak

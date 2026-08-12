@@ -30,7 +30,7 @@ export default function Header({ title }) {
   const displayEmail = email.length > 20 ? email.slice(0, 18) + '...' : email
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-5">
+    <header id="app-header" className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-5">
       <h1 className="text-lg font-bold text-primary">{title}</h1>
 
       <div className="flex items-center gap-4">

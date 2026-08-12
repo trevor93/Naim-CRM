@@ -51,6 +51,23 @@ export async function bulkUpdateCandidates(ids, updates) {
   if (error) throw error
 }
 
+export async function bulkDeleteCandidates(ids) {
+  const { error } = await supabase.from(TABLE).update({ deleted_at: new Date().toISOString() }).in('id', ids)
+  if (error) throw error
+}
+
+export async function autoDeleteCompletedCandidates(cutoff) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ deleted_at: new Date().toISOString() })
+    .in('stage', ['Hired', 'Rejected'])
+    .is('deleted_at', null)
+    .lt('updated_at', cutoff)
+    .select('id')
+  if (error) throw error
+  return data?.length || 0
+}
+
 export async function getCandidatesByStage() {
   const { data, error } = await supabase.from(TABLE).select('stage').is('deleted_at', null)
   if (error) throw error

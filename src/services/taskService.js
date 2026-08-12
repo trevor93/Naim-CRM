@@ -39,6 +39,19 @@ export async function deleteTask(id) {
   if (error) throw error
 }
 
+export async function archiveTasks(ids) {
+  if (!ids.length) return
+  const now = new Date().toISOString()
+  const { error } = await supabase.from(TABLE).update({ archived_at: now, updated_at: now }).in('id', ids)
+  if (error) throw error
+}
+
+export async function deleteCompletedTasksBefore(cutoff) {
+  if (!cutoff) return
+  const { error } = await supabase.from(TABLE).delete().eq('status', 'Completed').lt('completed_at', cutoff)
+  if (error) throw error
+}
+
 export async function getTaskCounts() {
   const { data, error } = await supabase.from(TABLE).select('status')
   if (error) throw error

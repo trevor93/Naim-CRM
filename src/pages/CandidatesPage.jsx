@@ -1,25 +1,112 @@
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { PageSpinner } from '../components/ui/Spinner'
 import CandidateForm from '../components/candidates/CandidateForm'
-import StatusDropdown from '../components/candidates/StatusDropdown'
+import StatusDropdown, { CANDIDATE_STATUSES } from '../components/candidates/StatusDropdown'
 import { isSupabaseConfigured } from '../supabase/client'
-import { getCandidates, updateCandidate, deleteCandidate } from '../services/candidateService'
+import {
+  getCandidates,
+  updateCandidate,
+  deleteCandidate,
+  bulkUpdateCandidates,
+  bulkDeleteCandidates,
+  autoDeleteCompletedCandidates,
+} from '../services/candidateService'
 import { demoCandidatesList } from '../services/demoData'
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils'
 import { useToast } from '../contexts/ToastContext'
 import {
   Users, Plus, Search, ChevronDown, ChevronUp, UserRound, FilePenLine,
-  Trash2, FileText, FileSpreadsheet, FileDown, RefreshCw, Settings
+  Trash2, FileText, FileSpreadsheet, FileDown, RefreshCw, Settings, TriangleAlert
 } from 'lucide-react'
 
-const STAGE_OPTIONS = ['Onboarding', 'Interviewing', 'Offer', 'Hired', 'Rejected']
+const STAGE_OPTIONS = CANDIDATE_STATUSES.map((status) => status.label)
+const AUTO_DELETE_STORAGE_KEY = 'candidates:autoDeleteSettings'
+const AUTO_DELETE_DURATIONS = [
+  { value: '7', label: '7 days (1 week)' },
+  { value: '30', label: '30 days (1 month)' },
+  { value: '60', label: '60 days (2 months)' },
+  { value: '90', label: '90 days (3 months)' },
+]
+const COMPLETED_STAGES = new Set(['Hired', 'Rejected'])
 const PAGE_SIZE = 10
 
+function getStoredAutoDeleteSettings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUTO_DELETE_STORAGE_KEY))
+    const days = AUTO_DELETE_DURATIONS.some((duration) => duration.value === stored?.days) ? stored.days : '30'
+    return { enabled: stored?.enabled !== false, days }
+  } catch {
+    return { enabled: true, days: '30' }
+  }
+}
+
+function BulkStageDropdown({ onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label="Update Stage"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        className="flex h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-text-primary shadow-sm transition-colors hover:bg-gray-50"
+      >
+        Update Stage
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label="Bulk stage options"
+          className="absolute left-0 top-full z-30 mt-1 w-40 overflow-hidden border border-gray-100 bg-white py-0.5 shadow-[0_8px_18px_rgba(0,0,0,0.10)] animate-scale-in"
+        >
+          {CANDIDATE_STATUSES.map((status) => (
+            <button
+              key={status.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onChange(status.label)
+                setOpen(false)
+              }}
+              className="flex w-full items-center gap-2.5 bg-white px-3 py-2 text-left text-[13px] text-gray-900 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+            >
+              <span data-status-dot className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
+              {status.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CandidatesPage() {
-  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [candidates, setCandidates] = useState([])
@@ -29,17 +116,19 @@ export default function CandidatesPage() {
   const [stageFilter, setStageFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedId, setExpandedId] = useState(null)
-  const [showForm, setShowForm] = useState(searchParams.get('add') === '1')
+  const [showForm, setShowForm] = useState(false)
   const [editCandidate, setEditCandidate] = useState(null)
   const [viewCandidate, setViewCandidate] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
+  const [showAutoDelete, setShowAutoDelete] = useState(false)
+  const [autoDeleteSettings, setAutoDeleteSettings] = useState(getStoredAutoDeleteSettings)
+  const [autoDeleteDraft, setAutoDeleteDraft] = useState(getStoredAutoDeleteSettings)
 
-  useEffect(() => {
-    loadCandidates()
-  }, [page, stageFilter, search])
-
-  async function loadCandidates() {
+  const loadCandidates = useCallback(async () => {
     setLoading(true)
+    setSelectedIds([])
+    setShowBulkDelete(false)
     try {
       if (!isSupabaseConfigured) {
         // Demo mode — filter/paginate the local demo dataset
@@ -66,7 +155,11 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, search, stageFilter, toast])
+
+  useEffect(() => {
+    loadCandidates()
+  }, [loadCandidates])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -74,8 +167,106 @@ export default function CandidatesPage() {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
+  const allOnPageSelected = candidates.length > 0 && candidates.every((candidate) => selectedIds.includes(candidate.id))
+
   function toggleSelectAll() {
-    setSelectedIds(selectedIds.length === candidates.length ? [] : candidates.map((c) => c.id))
+    setSelectedIds(allOnPageSelected ? [] : candidates.map((candidate) => candidate.id))
+  }
+
+  async function handleBulkStageChange(newStage) {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+
+    const previousCandidates = candidates
+    setCandidates((currentCandidates) => currentCandidates.map((candidate) => (
+      ids.includes(candidate.id) ? { ...candidate, stage: newStage, status: newStage } : candidate
+    )))
+
+    if (isSupabaseConfigured) {
+      try {
+        await bulkUpdateCandidates(ids, { stage: newStage, status: newStage })
+      } catch {
+        setCandidates(previousCandidates)
+        toast.error('Failed to update selected candidates')
+        return
+      }
+    } else {
+      demoCandidatesList.forEach((candidate) => {
+        if (ids.includes(candidate.id)) {
+          candidate.stage = newStage
+          candidate.status = newStage
+        }
+      })
+    }
+
+    setSelectedIds([])
+    toast.success(`Updated ${ids.length} candidates to ${newStage}`)
+  }
+
+  async function confirmBulkDelete() {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+
+    if (isSupabaseConfigured) {
+      try {
+        await bulkDeleteCandidates(ids)
+      } catch {
+        toast.error('Failed to delete selected candidates')
+        return
+      }
+    } else {
+      const deletedAt = new Date().toISOString()
+      demoCandidatesList.forEach((candidate) => {
+        if (ids.includes(candidate.id)) candidate.deleted_at = deletedAt
+      })
+    }
+
+    setShowBulkDelete(false)
+    setSelectedIds([])
+    toast.success(`${ids.length} candidates moved to Recycle Bin`)
+    loadCandidates()
+  }
+
+  function openAutoDeleteSettings() {
+    setAutoDeleteDraft(autoDeleteSettings)
+    setShowAutoDelete(true)
+  }
+
+  async function executeAutoDelete() {
+    const settings = { ...autoDeleteDraft }
+    localStorage.setItem(AUTO_DELETE_STORAGE_KEY, JSON.stringify(settings))
+    setAutoDeleteSettings(settings)
+
+    if (!settings.enabled) {
+      setShowAutoDelete(false)
+      toast.success('Candidate auto-deletion disabled')
+      return
+    }
+
+    const cutoff = new Date(Date.now() - Number(settings.days) * 86400000).toISOString()
+    try {
+      let deletedCount = 0
+      if (isSupabaseConfigured) {
+        deletedCount = await autoDeleteCompletedCandidates(cutoff)
+      } else {
+        const deletedAt = new Date().toISOString()
+        demoCandidatesList.forEach((candidate) => {
+          const activityDate = candidate.updated_at || candidate.created_at
+          if (!candidate.deleted_at && COMPLETED_STAGES.has(candidate.stage) && activityDate && activityDate < cutoff) {
+            candidate.deleted_at = deletedAt
+            deletedCount += 1
+          }
+        })
+      }
+
+      setShowAutoDelete(false)
+      await loadCandidates()
+      toast.success(deletedCount
+        ? `${deletedCount} completed candidate(s) moved to Recycle Bin`
+        : 'Auto-deletion settings saved; no candidates were eligible')
+    } catch {
+      toast.error('Failed to execute candidate auto-deletion')
+    }
   }
 
   async function handleStatusChange(id, newStage) {
@@ -113,28 +304,34 @@ export default function CandidatesPage() {
     loadCandidates()
   }
 
-  function exportRows() {
-    const source = isSupabaseConfigured ? candidates : demoCandidatesList.filter((c) => !c.deleted_at)
-    return source.map((c) => ({
-      Name: c.name,
-      Phone: c.phone || '',
-      Email: c.email || '',
-      Emergency: c.emergency_contact || 'N/A',
-      Stage: c.stage || '',
-      Salary: c.salary || 'N/A',
-      Position: c.position || c.job_title || 'N/A',
-      Departure: c.departure || 'Not set',
-      Company: c.company || c.work_company || 'N/A',
-      Country: c.country || 'N/A',
+  function exportRows(source) {
+    return source.map((candidate) => ({
+      Name: candidate.name,
+      Phone: candidate.phone || '',
+      Email: candidate.email || '',
+      Emergency: candidate.emergency_contact || 'N/A',
+      Stage: candidate.stage || '',
+      Salary: candidate.salary || 'N/A',
+      Position: candidate.position || candidate.job_title || 'N/A',
+      Departure: candidate.departure || 'Not set',
+      Company: candidate.company || candidate.work_company || 'N/A',
+      Country: candidate.country || 'N/A',
     }))
   }
 
-  function handleExport(type) {
-    const rows = exportRows()
+  function handleExport(type, selectedOnly = false) {
+    const source = selectedOnly
+      ? candidates.filter((candidate) => selectedIds.includes(candidate.id))
+      : isSupabaseConfigured
+        ? candidates
+        : demoCandidatesList.filter((candidate) => !candidate.deleted_at)
+    const rows = exportRows(source)
     if (!rows.length) return toast.error('No candidates to export')
-    if (type === 'csv') exportToCSV(rows, 'candidates.csv')
-    if (type === 'excel') exportToExcel(rows, 'candidates.xlsx')
-    if (type === 'pdf') exportToPDF(rows, 'All Candidates', 'candidates.pdf')
+
+    const basename = selectedOnly ? 'selected-candidates' : 'candidates'
+    if (type === 'csv') exportToCSV(rows, `${basename}.csv`)
+    if (type === 'excel') exportToExcel(rows, `${basename}.xlsx`)
+    if (type === 'pdf') exportToPDF(rows, selectedOnly ? 'Selected Candidates' : 'All Candidates', `${basename}.pdf`)
     toast.success(`Exported ${rows.length} candidates to ${type.toUpperCase()}`)
   }
 
@@ -166,7 +363,8 @@ export default function CandidatesPage() {
                 Sync Standard Data
               </button>
               <button
-                onClick={() => toast.success('Auto-Delete settings')}
+                type="button"
+                onClick={openAutoDeleteSettings}
                 className="flex items-center gap-2 rounded-full border border-cream bg-white px-4 py-2 text-[13px] font-medium text-primary shadow-sm hover:bg-cream-warm transition-colors"
               >
                 <Settings className="h-4 w-4" />
@@ -203,7 +401,8 @@ export default function CandidatesPage() {
               All Candidates
             </h2>
             <button
-              onClick={() => { setEditCandidate(null); setShowForm(true) }}
+              type="button"
+              onClick={() => navigate('/cv-builder')}
               className="flex items-center gap-1.5 rounded-full border border-cream bg-white px-4 py-1.5 text-[13px] font-semibold text-primary shadow-sm hover:bg-cream-warm transition-colors"
             >
               <Plus className="h-4 w-4" /> Add Candidate
@@ -236,12 +435,58 @@ export default function CandidatesPage() {
           <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-xs text-text-secondary">
             <input
               type="checkbox"
-              checked={candidates.length > 0 && selectedIds.length === candidates.length}
+              checked={allOnPageSelected}
               onChange={toggleSelectAll}
               className="h-3.5 w-3.5 rounded border-gray-300 accent-primary"
             />
             Select All on Page
           </label>
+
+          {selectedIds.length > 0 && (
+            <div
+              role="region"
+              aria-label="Candidate bulk actions"
+              className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#eee8d8] bg-white px-3 py-2.5 shadow-sm animate-fade-in"
+            >
+              <p className="mr-auto min-w-fit text-[13px] font-semibold text-primary">
+                {selectedIds.length} candidate(s) selected
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <BulkStageDropdown onChange={handleBulkStageChange} />
+                <button
+                  type="button"
+                  aria-label="Export selected candidates to PDF"
+                  onClick={() => handleExport('pdf', true)}
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-gray-50"
+                >
+                  <FileText className="h-3.5 w-3.5" aria-hidden="true" /> PDF
+                </button>
+                <button
+                  type="button"
+                  aria-label="Export selected candidates to Excel"
+                  onClick={() => handleExport('excel', true)}
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-gray-50"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" /> Excel
+                </button>
+                <button
+                  type="button"
+                  aria-label="Export selected candidates to CSV"
+                  onClick={() => handleExport('csv', true)}
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-gray-50"
+                >
+                  <FileDown className="h-3.5 w-3.5" aria-hidden="true" /> CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkDelete(true)}
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:bg-red-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Candidate rows ─────────────────────────── */}
           {loading ? (
@@ -369,6 +614,70 @@ export default function CandidatesPage() {
         </section>
       </div>
 
+      {/* ── Auto-delete settings modal ────────────────── */}
+      <Modal
+        isOpen={showAutoDelete}
+        onClose={() => setShowAutoDelete(false)}
+        title="Auto-Deletion Settings"
+        size="md"
+        className="max-w-md overflow-hidden"
+      >
+        <div className="space-y-4">
+          <label className="flex cursor-pointer items-center gap-3 text-[13px] font-medium text-[#8b6200]">
+            <input
+              type="checkbox"
+              checked={autoDeleteDraft.enabled}
+              onChange={(event) => setAutoDeleteDraft((current) => ({ ...current, enabled: event.target.checked }))}
+              className="h-4 w-4 accent-blue-600"
+            />
+            Enable auto-deletion for completed candidates
+          </label>
+
+          <label htmlFor="candidate-auto-delete-days" className="block text-[13px] font-semibold text-[#8b6200]">
+            Delete after (days):
+          </label>
+          <select
+            id="candidate-auto-delete-days"
+            value={autoDeleteDraft.days}
+            disabled={!autoDeleteDraft.enabled}
+            onChange={(event) => setAutoDeleteDraft((current) => ({ ...current, days: event.target.value }))}
+            className="-mt-2 h-12 w-full max-w-48 rounded-xl border-2 border-gray-900 bg-white px-4 text-base text-gray-900 outline-none transition disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {AUTO_DELETE_DURATIONS.map((duration) => (
+              <option key={duration.value} value={duration.value}>{duration.label}</option>
+            ))}
+          </select>
+
+          <div className="flex gap-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-amber-700">
+            <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-[13px] font-semibold">Auto-Deletion Policy</p>
+              <p className="mt-1 text-xs leading-4">
+                Completed candidates will be automatically deleted after the specified number of days. This helps maintain a clean database and removes old records.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowAutoDelete(false)}
+              className="h-12 rounded-xl border-2 border-[#efe0c0] bg-white px-6 text-sm font-semibold text-[#8b6200] shadow-sm transition-colors hover:bg-cream-warm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={executeAutoDelete}
+              className="flex h-12 items-center gap-2 rounded-xl bg-[#ca9000] px-6 text-sm font-semibold text-white shadow-md transition-colors hover:bg-[#b27f00]"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Execute Now
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* ── Add / Edit modal ──────────────────────────── */}
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditCandidate(null) }} title={editCandidate ? 'Edit Candidate' : 'Add Candidate'} size="xl">
         <CandidateForm
@@ -420,6 +729,21 @@ export default function CandidatesPage() {
           </button>
           <button onClick={confirmDelete} className="rounded-full bg-red-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-red-700 transition-colors">
             Delete
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Bulk delete confirm modal ─────────────────── */}
+      <Modal isOpen={showBulkDelete} onClose={() => setShowBulkDelete(false)} title="Delete Selected Candidates" size="sm">
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to delete <span className="font-bold text-text-primary">{selectedIds.length} selected candidates</span>? They will be moved to the Recycle Bin.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={() => setShowBulkDelete(false)} className="rounded-full border border-cream bg-white px-4 py-2 text-[13px] font-medium text-text-primary hover:bg-cream-warm transition-colors">
+            Cancel
+          </button>
+          <button onClick={confirmBulkDelete} className="rounded-full bg-red-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-red-700 transition-colors">
+            Delete {selectedIds.length} Candidates
           </button>
         </div>
       </Modal>

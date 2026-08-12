@@ -1,147 +1,137 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
+import { Download, Printer, Search } from 'lucide-react'
 import Layout from '../components/layout/Layout'
-import Card, { CardTitle } from '../components/ui/Card'
 import Button from '../components/ui/Button'
-import Tabs from '../components/ui/Tabs'
-import { PageSpinner } from '../components/ui/Spinner'
-import { getCandidatesByStage, getCandidatesByCountry, getRecentPlacements } from '../services/candidateService'
+import CandidatesByStageCard from '../components/reports/CandidatesByStageCard'
+import LivePerformanceDashboard from '../components/reports/LivePerformanceDashboard'
+import PlacementHistoryTable from '../components/reports/PlacementHistoryTable'
+import RecentSuccessfulPlacements from '../components/reports/RecentSuccessfulPlacements'
+import ReportMetricCard from '../components/reports/ReportMetricCard'
+import {
+  APPLICATIONS_BY_COUNTRY,
+  CANDIDATE_STAGES,
+  filterReportRows,
+  PLACEMENT_HISTORY,
+  RECENT_SUCCESSFUL_PLACEMENTS,
+  REPORT_METRICS,
+  sortReportRows,
+  STAGE_DISTRIBUTION,
+  TASK_PERFORMANCE,
+  toExportRows,
+} from '../components/reports/reportsData'
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils'
 import { useToast } from '../contexts/ToastContext'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { Download, FileText, BarChart3 } from 'lucide-react'
 
-const COLORS = ['#8b6914', '#b8860b', '#d7a42a', '#e6be8a', '#6b520f', '#9a7009', '#f59e0b', '#16a34a', '#2563eb', '#7c3aed']
+const exportOptions = [
+  { value: 'csv', label: 'CSV Format' },
+  { value: 'xlsx', label: 'Excel Format' },
+  { value: 'pdf', label: 'PDF Format' },
+]
 
 export default function ReportsPage() {
   const toast = useToast()
-  const [loading, setLoading] = useState(true)
-  const [stageData, setStageData] = useState([])
-  const [countryData, setCountryData] = useState([])
-  const [placements, setPlacements] = useState([])
-  const [tab, setTab] = useState('overview')
+  const [search, setSearch] = useState('')
+  const [format, setFormat] = useState('csv')
+  const [sort, setSort] = useState({ key: null, direction: null })
 
-  useEffect(() => { loadReports() }, [])
+  const filteredPlacements = useMemo(
+    () => filterReportRows(RECENT_SUCCESSFUL_PLACEMENTS, search),
+    [search]
+  )
 
-  async function loadReports() {
+  const visibleHistory = useMemo(
+    () => sortReportRows(filterReportRows(PLACEMENT_HISTORY, search), sort),
+    [search, sort]
+  )
+
+  function handleSort(key) {
+    setSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }))
+  }
+
+  function handleExport() {
+    const rows = toExportRows(visibleHistory)
+    if (!rows.length) {
+      toast.error('No report data to export')
+      return
+    }
+
     try {
-      const [stages, countries, recentPlacements] = await Promise.all([
-        getCandidatesByStage(),
-        getCandidatesByCountry(),
-        getRecentPlacements(20),
-      ])
-      setStageData(Object.entries(stages).map(([name, value]) => ({ name, value })))
-      setCountryData(Object.entries(countries).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value })))
-      setPlacements(recentPlacements)
-    } catch { toast.error('Failed to load reports') }
-    finally { setLoading(false) }
+      if (format === 'csv') exportToCSV(rows, 'placement-history-report.csv')
+      else if (format === 'xlsx') exportToExcel(rows, 'placement-history-report.xlsx')
+      else exportToPDF(rows, 'Placement History Report', 'placement-history-report.pdf')
+      toast.success('Report exported!')
+    } catch {
+      toast.error('Failed to export report')
+    }
   }
-
-  function handleExport(type) {
-    const data = placements.map((c) => ({ Name: c.name, Email: c.email, Phone: c.phone, Stage: c.stage, Country: c.country_applying_to }))
-    if (type === 'csv') exportToCSV(data, 'candidates-report.csv')
-    else if (type === 'xlsx') exportToExcel(data, 'candidates-report.xlsx')
-    else exportToPDF(data, 'Candidates Report', 'candidates-report.pdf')
-    toast.success('Report exported!')
-  }
-
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
-    { id: 'pipeline', label: 'Pipeline', icon: FileText },
-    { id: 'geography', label: 'Geography', icon: BarChart3 },
-  ]
-
-  if (loading) return <Layout title="Reports & Analytics"><PageSpinner /></Layout>
 
   return (
-    <Layout title="Reports & Analytics">
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <Tabs tabs={tabs} defaultTab={tab} onChange={setTab} />
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleExport('csv')}><Download className="h-4 w-4" /> CSV</Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport('xlsx')}><Download className="h-4 w-4" /> Excel</Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}><Download className="h-4 w-4" /> PDF</Button>
+    <Layout title="Admin Dashboard">
+      <section id="reports-print-area" className="min-w-0 space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary sm:text-3xl">Reports & Analytics</h1>
+          <p className="mt-1 text-sm text-text-secondary">Track performance and analyze recruitment metrics</p>
+        </div>
+
+        <div className="reports-no-print flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <label className="relative block w-full xl:max-w-md">
+            <span className="sr-only">Search reports data</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Search reports data"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search reports..."
+              className="w-full rounded-lg border border-cream bg-white py-2.5 pl-10 pr-3 text-sm text-text-primary placeholder-text-muted transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <label className="block min-w-40">
+              <span className="sr-only">Report export format</span>
+              <select
+                aria-label="Report export format"
+                value={format}
+                onChange={(event) => setFormat(event.target.value)}
+                className="w-full rounded-lg border border-cream bg-white px-3 py-2.5 text-sm text-text-primary transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {exportOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <Button type="button" onClick={handleExport} className="min-h-10">
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Export Report
+            </Button>
+            <Button type="button" variant="outline" onClick={() => window.print()} className="min-h-10 bg-white">
+              <Printer className="h-4 w-4" aria-hidden="true" />
+              Print Report
+            </Button>
           </div>
         </div>
 
-        {tab === 'overview' && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card>
-              <CardTitle>Candidate Stage Distribution</CardTitle>
-              <div className="mt-4 h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={stageData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                      {stageData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-            <Card>
-              <CardTitle>Applications by Country</CardTitle>
-              <div className="mt-4 h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={countryData}>
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#8b6914" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </div>
-        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          {REPORT_METRICS.map((metric) => <ReportMetricCard key={metric.label} metric={metric} />)}
+        </div>
 
-        {tab === 'pipeline' && (
-          <Card>
-            <CardTitle>Pipeline Funnel</CardTitle>
-            <div className="mt-4 space-y-2">
-              {stageData.sort((a, b) => b.value - a.value).map((item, i) => (
-                <div key={item.name} className="flex items-center gap-3">
-                  <span className="w-32 text-sm text-text-secondary">{item.name}</span>
-                  <div className="flex-1">
-                    <div className="h-6 rounded bg-cream overflow-hidden">
-                      <div className="h-full rounded bg-primary transition-all" style={{ width: `${(item.value / Math.max(...stageData.map(s => s.value), 1)) * 100}%` }} />
-                    </div>
-                  </div>
-                  <span className="w-10 text-right text-sm font-medium">{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
+        <CandidatesByStageCard stages={CANDIDATE_STAGES} />
 
-        {tab === 'geography' && (
-          <Card>
-            <CardTitle>Candidates by Country</CardTitle>
-            <div className="mt-4 h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={countryData} layout="vertical">
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#8b6914" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        )}
+        <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.7fr)]">
+          <RecentSuccessfulPlacements placements={filteredPlacements} />
+          <LivePerformanceDashboard
+            stages={STAGE_DISTRIBUTION}
+            countries={APPLICATIONS_BY_COUNTRY}
+            tasks={TASK_PERFORMANCE}
+          />
+        </div>
 
-        <Card>
-          <CardTitle>Recent Placements</CardTitle>
-          <div className="mt-4 space-y-2">
-            {placements.length > 0 ? placements.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-lg border border-cream p-3">
-                <div><p className="font-medium">{c.name}</p><p className="text-xs text-text-muted">{c.email || c.phone}</p></div>
-                <div className="text-right"><p className="text-sm font-medium text-primary">{c.country_applying_to}</p><p className="text-xs text-text-muted">{c.job_title}</p></div>
-              </div>
-            )) : <p className="py-8 text-center text-text-muted">No placements yet</p>}
-          </div>
-        </Card>
-      </div>
+        <PlacementHistoryTable rows={visibleHistory} sort={sort} onSort={handleSort} />
+      </section>
     </Layout>
   )
 }
