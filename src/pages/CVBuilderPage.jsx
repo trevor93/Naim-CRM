@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Bot,
   Camera,
@@ -20,6 +21,8 @@ import Modal from '../components/ui/Modal'
 import { useToast } from '../contexts/ToastContext'
 import {
   clearCVBuilderDraft,
+  cvDraftFromCandidate,
+  CV_SELECT_OPTIONS,
   loadCVBuilderDraft,
   saveCVBuilderDraft,
 } from '../services/cvBuilderService'
@@ -31,15 +34,6 @@ const TEMPLATES = [
   ['4', 'Template 4', 'NAIM INVESTMENTS', '2 PAGES', '(Arabic Style)'],
   ['5', 'Template 5', 'DOMESTIC HELPER', '(Almehan Layout)'],
 ]
-
-const SELECT_OPTIONS = {
-  religion: ['Islam', 'Christianity', 'Hinduism', 'Other'],
-  civilStatus: ['Single', 'Married', 'Divorced', 'Widowed'],
-  educationLevel: ['Primary', 'Secondary', 'Diploma', 'Degree'],
-  englishLevel: ['Beginner', 'Fair', 'Good', 'Fluent'],
-  arabicLevel: ['Beginner', 'Fair', 'Good', 'Fluent'],
-  stage: ['Onboarding', 'Screening', 'Interview', 'Placed'],
-}
 
 function Section({ title, note, tone = 'default', children }) {
   const tones = {
@@ -89,7 +83,8 @@ function SelectField({ label, value, onChange, options, placeholder = 'Select' }
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 outline-none focus:border-[#b98a17] focus:ring-2 focus:ring-[#d8b85a]/20"
       >
-        <option value="">{placeholder}</option>
+        {/* Stage passes placeholder={null}: it always holds one of its choices. */}
+        {placeholder && <option value="">{placeholder}</option>}
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     </label>
@@ -165,9 +160,29 @@ function PhotoCard({ title, name, onFile }) {
 
 export default function CVBuilderPage() {
   const toast = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [draft, setDraft] = useState(() => loadCVBuilderDraft())
   const [previewOpen, setPreviewOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
+
+  // The Candidates page "Create/Edit CV" action hands a candidate over in
+  // route state. Merge it into the draft, then clear the state so a refresh
+  // or back-navigation doesn't silently re-apply it.
+  const handoffCandidate = location.state?.candidate
+  const handledHandoffRef = useRef(null)
+  useEffect(() => {
+    if (!handoffCandidate || handledHandoffRef.current === handoffCandidate) return
+    handledHandoffRef.current = handoffCandidate
+    const prefill = cvDraftFromCandidate(handoffCandidate)
+    setDraft((current) => {
+      const next = { ...current, ...prefill }
+      if (next.autoSave) saveCVBuilderDraft(next)
+      return next
+    })
+    toast.success(`CV loaded for ${handoffCandidate.name || 'candidate'}`)
+    navigate('/cv-builder', { replace: true, state: null })
+  }, [handoffCandidate, navigate, toast])
 
   useEffect(() => {
     if (!draft.autoSave) return undefined
@@ -307,7 +322,7 @@ export default function CVBuilderPage() {
                 <Field label="Full Name (Arabic)" value={draft.fullNameArabic} onChange={(value) => update('fullNameArabic', value)} dir="rtl" />
                 <Field label="Address" value={draft.address} onChange={(value) => update('address', value)} placeholder="e.g. MOMBASA, KENYA" />
                 <Field label="Nationality" value={draft.nationality} onChange={(value) => update('nationality', value)} placeholder="e.g. KENYAN" />
-                <SelectField label="Religion" value={draft.religion} onChange={(value) => update('religion', value)} options={SELECT_OPTIONS.religion} placeholder="Select Religion" />
+                <SelectField label="Religion" value={draft.religion} onChange={(value) => update('religion', value)} options={CV_SELECT_OPTIONS.religion} placeholder="Select Religion" />
                 <Field label="Date of Birth" value={draft.dateOfBirth} onChange={(value) => update('dateOfBirth', value)} type="date" />
                 <Field label="Place of Birth" value={draft.placeOfBirth} onChange={(value) => update('placeOfBirth', value)} placeholder="e.g. KWALE, KENYA" />
                 <Field label="Father's Name" value={draft.fatherName} onChange={(value) => update('fatherName', value)} placeholder="e.g. HASSAN KOMBO" />
@@ -325,7 +340,7 @@ export default function CVBuilderPage() {
 
             <Section title="Family Status">
               <div className="grid gap-4 sm:grid-cols-3">
-                <SelectField label="Civil Status" value={draft.civilStatus} onChange={(value) => update('civilStatus', value)} options={SELECT_OPTIONS.civilStatus} placeholder="Select Status" />
+                <SelectField label="Civil Status" value={draft.civilStatus} onChange={(value) => update('civilStatus', value)} options={CV_SELECT_OPTIONS.civilStatus} placeholder="Select Status" />
                 <Field label="Spouse" value={draft.spouse} onChange={(value) => update('spouse', value)} placeholder="Select" />
                 <Field label="Number of Kids" value={draft.numberOfKids} onChange={(value) => update('numberOfKids', value)} placeholder="e.g. 1 KID" />
               </div>
@@ -333,9 +348,9 @@ export default function CVBuilderPage() {
 
             <Section title="Education & Experience">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <SelectField label="Education Level" value={draft.educationLevel} onChange={(value) => update('educationLevel', value)} options={SELECT_OPTIONS.educationLevel} placeholder="Select Level" />
-                <SelectField label="English Level" value={draft.englishLevel} onChange={(value) => update('englishLevel', value)} options={SELECT_OPTIONS.englishLevel} placeholder="Select Level" />
-                <SelectField label="Arabic Level" value={draft.arabicLevel} onChange={(value) => update('arabicLevel', value)} options={SELECT_OPTIONS.arabicLevel} placeholder="Select Level" />
+                <SelectField label="Education Level" value={draft.educationLevel} onChange={(value) => update('educationLevel', value)} options={CV_SELECT_OPTIONS.educationLevel} placeholder="Select Level" />
+                <SelectField label="English Level" value={draft.englishLevel} onChange={(value) => update('englishLevel', value)} options={CV_SELECT_OPTIONS.englishLevel} placeholder="Select Level" />
+                <SelectField label="Arabic Level" value={draft.arabicLevel} onChange={(value) => update('arabicLevel', value)} options={CV_SELECT_OPTIONS.arabicLevel} placeholder="Select Level" />
                 <Field label="Work Position" value={draft.workPosition} onChange={(value) => update('workPosition', value)} />
                 <Field label="Work Country" value={draft.workCountry} onChange={(value) => update('workCountry', value)} placeholder="e.g. SAUDI ARABIA" />
                 <Field label="Work Years" value={draft.workYears} onChange={(value) => update('workYears', value)} placeholder="e.g. 2 YEARS" />
@@ -349,7 +364,7 @@ export default function CVBuilderPage() {
                 <Field label="Emergency Contact" value={draft.emergencyContact} onChange={(value) => update('emergencyContact', value)} placeholder="e.g. +254700000000" />
                 <Field label="Work Company" value={draft.workCompany} onChange={(value) => update('workCompany', value)} placeholder="e.g. ALJABRIYAH RECRUITMENT OFFICE" />
                 <Field label="Work City" value={draft.workCity} onChange={(value) => update('workCity', value)} />
-                <SelectField label="Stage" value={draft.stage} onChange={(value) => update('stage', value)} options={SELECT_OPTIONS.stage} />
+                <SelectField label="Stage" value={draft.stage} onChange={(value) => update('stage', value)} options={CV_SELECT_OPTIONS.stage} placeholder={null} />
               </div>
             </Section>
 

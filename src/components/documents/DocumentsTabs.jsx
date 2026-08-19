@@ -7,6 +7,8 @@ const DOCUMENT_TABS = [
   ['reports', 'Reports'],
 ]
 
+export const DOCUMENT_TAB_IDS = DOCUMENT_TABS.map(([id]) => id)
+
 export default function DocumentsTabs({ activeTab = 'cvs', onChange, onUnavailable }) {
   return (
     <nav aria-label="Document categories" className="overflow-x-auto border-b border-gray-200">

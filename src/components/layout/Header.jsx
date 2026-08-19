@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Search, LogOut, User } from 'lucide-react'
+import { Bell, LogOut, User } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { demoNotifications } from '../../services/demoData'
+import GlobalSearch from './GlobalSearch'
 
 export default function Header({ title }) {
   const { user, logout } = useAuth()
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifications, setNotifications] = useState(demoNotifications)
-  const [search, setSearch] = useState('')
   const notifRef = useRef(null)
 
   useEffect(() => {
@@ -35,17 +35,7 @@ export default function Header({ title }) {
 
       <div className="flex items-center gap-4">
         {/* Search pill */}
-        <div className="relative hidden md:block">
-          <input
-            id="global-search"
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="h-9 w-64 rounded-full border border-gray-300 bg-white pl-4 pr-9 text-sm text-text-primary placeholder-gray-400 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/30"
-          />
-          <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-        </div>
+        <GlobalSearch />
 
         {/* Notification bell */}
         <div className="relative" ref={notifRef}>

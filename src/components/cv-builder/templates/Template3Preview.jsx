@@ -29,6 +29,25 @@ function LevelRow({ label, english, arabic, arabicLabel }) {
   )
 }
 
+// This template's language table has four fixed rows, while the builder offers
+// the reference form's levels (NONE/LITTLE/BASIC/GOOD/FLUENT/EXCELLENT). Each
+// level folds onto the nearest row so the tick still lands where it belongs.
+const LEVEL_ROWS = {
+  none: 'POOR',
+  poor: 'POOR',
+  little: 'LITTLE',
+  basic: 'LITTLE',
+  beginner: 'LITTLE',
+  fair: 'FAIR',
+  good: 'FAIR',
+  fluent: 'FLUENT',
+  excellent: 'FLUENT',
+}
+
+function levelTick(value, row) {
+  return LEVEL_ROWS[String(value || '').trim().toLowerCase()] === row ? '✓' : ''
+}
+
 export default function Template3Preview({ draft }) {
   const education = lines(draft.additionalEducation)
   const destination = valueOrBlank(draft.destination, 'SAUDI ARABIA')
@@ -146,10 +165,10 @@ export default function Template3Preview({ draft }) {
               <tbody>
                 <tr className="cv-t3-section-title"><th colSpan={3}>LANGUAGES</th><th dir="rtl">إجادة اللغات</th></tr>
                 <tr className="cv-t3-maroon"><th>ENGLISH</th><th dir="rtl">إنجليزي</th><th>ARABIC</th><th dir="rtl">عربي</th></tr>
-                <LevelRow label="POOR" english={draft.englishLevel === 'Poor' ? '✓' : ''} arabic={draft.arabicLevel === 'Poor' ? '✓' : ''} arabicLabel="لا شيء" />
-                <LevelRow label="LITTLE" english={draft.englishLevel === 'Little' ? '✓' : ''} arabic={draft.arabicLevel === 'Little' ? '✓' : ''} arabicLabel="قليل" />
-                <LevelRow label="FAIR" english={draft.englishLevel === 'Fair' ? '✓' : ''} arabic={draft.arabicLevel === 'Fair' ? '✓' : ''} arabicLabel="وسط" />
-                <LevelRow label="FLUENT" english={draft.englishLevel === 'Fluent' ? '✓' : ''} arabic={draft.arabicLevel === 'Fluent' ? '✓' : ''} arabicLabel="" />
+                <LevelRow label="POOR" english={levelTick(draft.englishLevel, 'POOR')} arabic={levelTick(draft.arabicLevel, 'POOR')} arabicLabel="لا شيء" />
+                <LevelRow label="LITTLE" english={levelTick(draft.englishLevel, 'LITTLE')} arabic={levelTick(draft.arabicLevel, 'LITTLE')} arabicLabel="قليل" />
+                <LevelRow label="FAIR" english={levelTick(draft.englishLevel, 'FAIR')} arabic={levelTick(draft.arabicLevel, 'FAIR')} arabicLabel="وسط" />
+                <LevelRow label="FLUENT" english={levelTick(draft.englishLevel, 'FLUENT')} arabic={levelTick(draft.arabicLevel, 'FLUENT')} arabicLabel="" />
               </tbody>
             </table>
 

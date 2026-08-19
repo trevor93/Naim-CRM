@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import useSearchQueryParam from '../hooks/useSearchQueryParam'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { PageSpinner } from '../components/ui/Spinner'
 import CandidateForm from '../components/candidates/CandidateForm'
+import CandidateEditForm from '../components/candidates/CandidateEditForm'
 import StatusDropdown, { CANDIDATE_STATUSES } from '../components/candidates/StatusDropdown'
 import { isSupabaseConfigured } from '../supabase/client'
 import {
@@ -13,7 +15,11 @@ import {
   bulkUpdateCandidates,
   bulkDeleteCandidates,
   autoDeleteCompletedCandidates,
+  clearAllCandidates,
+  countActiveCandidates,
 } from '../services/candidateService'
+import { syncStandardCandidateData, syncStandardDemoData } from '../services/candidateSyncService'
+import { addLocalRecycleBinItems } from '../services/recycleBinService'
 import { demoCandidatesList } from '../services/demoData'
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils'
 import { useToast } from '../contexts/ToastContext'
@@ -37,9 +43,11 @@ function getStoredAutoDeleteSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(AUTO_DELETE_STORAGE_KEY))
     const days = AUTO_DELETE_DURATIONS.some((duration) => duration.value === stored?.days) ? stored.days : '30'
-    return { enabled: stored?.enabled !== false, days }
+    // Auto-deletion stays off until the user ticks the box and runs it, which is
+    // what the green dot on the Auto-Delete button reports.
+    return { enabled: stored?.enabled === true, days }
   } catch {
-    return { enabled: true, days: '30' }
+    return { enabled: false, days: '30' }
   }
 }
 
@@ -112,7 +120,7 @@ export default function CandidatesPage() {
   const [candidates, setCandidates] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useSearchQueryParam()
   const [stageFilter, setStageFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedId, setExpandedId] = useState(null)
@@ -124,6 +132,11 @@ export default function CandidatesPage() {
   const [showAutoDelete, setShowAutoDelete] = useState(false)
   const [autoDeleteSettings, setAutoDeleteSettings] = useState(getStoredAutoDeleteSettings)
   const [autoDeleteDraft, setAutoDeleteDraft] = useState(getStoredAutoDeleteSettings)
+  const [autoDeleteBusy, setAutoDeleteBusy] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [clearTarget, setClearTarget] = useState(null)
+  const [clearing, setClearing] = useState(false)
+  const autoSweptRef = useRef(false)
 
   const loadCandidates = useCallback(async () => {
     setLoading(true)
@@ -216,9 +229,9 @@ export default function CandidatesPage() {
       }
     } else {
       const deletedAt = new Date().toISOString()
-      demoCandidatesList.forEach((candidate) => {
-        if (ids.includes(candidate.id)) candidate.deleted_at = deletedAt
-      })
+      const removed = demoCandidatesList.filter((candidate) => ids.includes(candidate.id))
+      removed.forEach((candidate) => { candidate.deleted_at = deletedAt })
+      addLocalRecycleBinItems(removed)
     }
 
     setShowBulkDelete(false)
@@ -232,40 +245,114 @@ export default function CandidatesPage() {
     setShowAutoDelete(true)
   }
 
+  // Moves completed candidates whose last activity predates the retention
+  // window into the Recycle Bin, and reports how many were removed.
+  const sweepCompletedCandidates = useCallback(async (settings) => {
+    const cutoff = new Date(Date.now() - Number(settings.days) * 86400000).toISOString()
+    if (isSupabaseConfigured) return autoDeleteCompletedCandidates(cutoff)
+
+    const deletedAt = new Date().toISOString()
+    const expired = demoCandidatesList.filter((candidate) => {
+      const activityDate = candidate.updated_at || candidate.created_at
+      return !candidate.deleted_at && COMPLETED_STAGES.has(candidate.stage) && activityDate && activityDate < cutoff
+    })
+    expired.forEach((candidate) => { candidate.deleted_at = deletedAt })
+    addLocalRecycleBinItems(expired)
+    return expired.length
+  }, [])
+
   async function executeAutoDelete() {
     const settings = { ...autoDeleteDraft }
-    localStorage.setItem(AUTO_DELETE_STORAGE_KEY, JSON.stringify(settings))
-    setAutoDeleteSettings(settings)
-
-    if (!settings.enabled) {
-      setShowAutoDelete(false)
-      toast.success('Candidate auto-deletion disabled')
-      return
-    }
-
-    const cutoff = new Date(Date.now() - Number(settings.days) * 86400000).toISOString()
+    setAutoDeleteBusy(true)
     try {
-      let deletedCount = 0
-      if (isSupabaseConfigured) {
-        deletedCount = await autoDeleteCompletedCandidates(cutoff)
-      } else {
-        const deletedAt = new Date().toISOString()
-        demoCandidatesList.forEach((candidate) => {
-          const activityDate = candidate.updated_at || candidate.created_at
-          if (!candidate.deleted_at && COMPLETED_STAGES.has(candidate.stage) && activityDate && activityDate < cutoff) {
-            candidate.deleted_at = deletedAt
-            deletedCount += 1
-          }
-        })
+      localStorage.setItem(AUTO_DELETE_STORAGE_KEY, JSON.stringify(settings))
+      setAutoDeleteSettings(settings)
+      autoSweptRef.current = true
+
+      if (!settings.enabled) {
+        setShowAutoDelete(false)
+        toast.success('Candidate auto-deletion disabled')
+        return
       }
 
+      const deletedCount = await sweepCompletedCandidates(settings)
       setShowAutoDelete(false)
       await loadCandidates()
       toast.success(deletedCount
-        ? `${deletedCount} completed candidate(s) moved to Recycle Bin`
-        : 'Auto-deletion settings saved; no candidates were eligible')
+        ? `Auto-deletion active — ${deletedCount} completed candidate(s) moved to Recycle Bin`
+        : `Auto-deletion active — no completed candidate is older than ${settings.days} days yet`)
     } catch {
       toast.error('Failed to execute candidate auto-deletion')
+    } finally {
+      setAutoDeleteBusy(false)
+    }
+  }
+
+  // While the setting is on the sweep also runs when the page opens, so
+  // auto-deletion keeps working without the user re-running it by hand.
+  useEffect(() => {
+    if (autoSweptRef.current || !autoDeleteSettings.enabled) return
+    autoSweptRef.current = true
+    sweepCompletedCandidates(autoDeleteSettings)
+      .then((deletedCount) => {
+        if (!deletedCount) return
+        toast.success(`Auto-delete removed ${deletedCount} completed candidate(s)`)
+        loadCandidates()
+      })
+      .catch(() => toast.error('Auto-delete sweep failed'))
+  }, [autoDeleteSettings, loadCandidates, sweepCompletedCandidates, toast])
+
+  async function handleSyncStandardData() {
+    setSyncing(true)
+    try {
+      const result = isSupabaseConfigured
+        ? await syncStandardCandidateData()
+        : syncStandardDemoData(demoCandidatesList)
+      await loadCandidates()
+      toast.success(result.standardized
+        ? `Standard data synced — ${result.standardized} of ${result.checked} candidate record(s) updated`
+        : `Standard data synced — all ${result.checked} candidate record(s) already standard`)
+    } catch {
+      toast.error('Failed to sync standard data')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function openClearData() {
+    try {
+      const count = isSupabaseConfigured
+        ? await countActiveCandidates()
+        : demoCandidatesList.filter((candidate) => !candidate.deleted_at).length
+      if (!count) return toast.error('There are no candidate records to clear')
+      setClearTarget(count)
+    } catch {
+      toast.error('Failed to read candidate records')
+    }
+  }
+
+  async function confirmClearData() {
+    setClearing(true)
+    try {
+      let cleared = 0
+      if (isSupabaseConfigured) {
+        cleared = await clearAllCandidates()
+      } else {
+        const deletedAt = new Date().toISOString()
+        const live = demoCandidatesList.filter((candidate) => !candidate.deleted_at)
+        live.forEach((candidate) => { candidate.deleted_at = deletedAt })
+        addLocalRecycleBinItems(live)
+        cleared = live.length
+      }
+      setClearTarget(null)
+      setExpandedId(null)
+      setPage(1)
+      await loadCandidates()
+      toast.success(`${cleared} candidate record(s) cleared and moved to the Recycle Bin`)
+    } catch {
+      toast.error('Failed to clear Supabase candidate data')
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -297,7 +384,10 @@ export default function CandidatesPage() {
       }
     } else {
       const demo = demoCandidatesList.find((c) => c.id === deleteTarget.id)
-      if (demo) demo.deleted_at = new Date().toISOString()
+      if (demo) {
+        demo.deleted_at = new Date().toISOString()
+        addLocalRecycleBinItems(demo)
+      }
     }
     toast.success('Candidate moved to Recycle Bin')
     setDeleteTarget(null)
@@ -356,27 +446,37 @@ export default function CandidatesPage() {
           <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
             <div className="flex flex-col items-start gap-2">
               <button
-                onClick={() => { toast.success('Standard data synced'); loadCandidates() }}
-                className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-hover transition-colors"
+                type="button"
+                onClick={handleSyncStandardData}
+                disabled={syncing}
+                className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-hover transition-colors disabled:cursor-not-allowed disabled:opacity-70"
               >
-                <RefreshCw className="h-4 w-4" />
-                Sync Standard Data
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {syncing ? 'Syncing…' : 'Sync Standard Data'}
               </button>
               <button
                 type="button"
                 onClick={openAutoDeleteSettings}
+                title={autoDeleteSettings.enabled ? 'Auto-deletion is active' : 'Auto-deletion is off'}
                 className="flex items-center gap-2 rounded-full border border-cream bg-white px-4 py-2 text-[13px] font-medium text-primary shadow-sm hover:bg-cream-warm transition-colors"
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4" aria-hidden="true" />
                 Auto-Delete
+                {autoDeleteSettings.enabled && (
+                  <>
+                    <span data-testid="auto-delete-active" className="h-2 w-2 rounded-full bg-green-500" aria-hidden="true" />
+                    <span className="sr-only">(active)</span>
+                  </>
+                )}
               </button>
             </div>
             <button
-              onClick={() => toast.error('Clear Firebase is disabled in this environment')}
+              type="button"
+              onClick={openClearData}
               className="flex items-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-[13px] font-medium text-red-600 shadow-sm hover:bg-red-50 transition-colors"
             >
-              <Trash2 className="h-4 w-4" />
-              Clear Firebase
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Clear Supabase
             </button>
             <div className="flex items-center gap-2">
               <span className="text-[13px] text-text-secondary">Export All:</span>
@@ -525,10 +625,10 @@ export default function CandidatesPage() {
                         <span>Salary: <span className="font-medium text-text-primary">{c.salary || 'N/A'}</span></span>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        <button onClick={() => setViewCandidate(c)} title="View profile" className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 transition-colors">
+                        <button onClick={() => navigate('/cv-builder', { state: { candidate: c } })} title="Create/Edit CV" aria-label={`Create or edit CV for ${c.name}`} className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 transition-colors">
                           <UserRound className="h-4 w-4" />
                         </button>
-                        <button onClick={() => { setEditCandidate(c); setShowForm(true) }} title="Edit" className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 transition-colors">
+                        <button onClick={() => { setEditCandidate(c); setShowForm(true) }} title="Edit" aria-label={`Edit ${c.name}`} className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 transition-colors">
                           <FilePenLine className="h-4 w-4" />
                         </button>
                         <button onClick={() => setDeleteTarget(c)} title="Delete" className="rounded-md p-1.5 text-red-500 hover:bg-red-50 transition-colors">
@@ -669,22 +769,35 @@ export default function CandidatesPage() {
             <button
               type="button"
               onClick={executeAutoDelete}
-              className="flex h-12 items-center gap-2 rounded-xl bg-[#ca9000] px-6 text-sm font-semibold text-white shadow-md transition-colors hover:bg-[#b27f00]"
+              disabled={autoDeleteBusy}
+              className="flex h-12 items-center gap-2 rounded-xl bg-[#ca9000] px-6 text-sm font-semibold text-white shadow-md transition-colors hover:bg-[#b27f00] disabled:cursor-not-allowed disabled:opacity-70"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Execute Now
+              {autoDeleteBusy ? 'Working…' : 'Execute Now'}
             </button>
           </div>
         </div>
       </Modal>
 
       {/* ── Add / Edit modal ──────────────────────────── */}
-      <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditCandidate(null) }} title={editCandidate ? 'Edit Candidate' : 'Add Candidate'} size="xl">
-        <CandidateForm
-          candidate={editCandidate}
-          onSave={() => { setShowForm(false); setEditCandidate(null); loadCandidates() }}
-          onCancel={() => { setShowForm(false); setEditCandidate(null) }}
-        />
+      <Modal
+        isOpen={showForm}
+        onClose={() => { setShowForm(false); setEditCandidate(null) }}
+        title={editCandidate ? 'Edit Candidate' : 'Add Candidate'}
+        size={editCandidate ? 'lg' : 'xl'}
+      >
+        {editCandidate ? (
+          <CandidateEditForm
+            candidate={editCandidate}
+            onSave={() => { setShowForm(false); setEditCandidate(null); loadCandidates() }}
+            onCancel={() => { setShowForm(false); setEditCandidate(null) }}
+          />
+        ) : (
+          <CandidateForm
+            onSave={() => { setShowForm(false); loadCandidates() }}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
       </Modal>
 
       {/* ── View profile modal ────────────────────────── */}
@@ -745,6 +858,42 @@ export default function CandidatesPage() {
           <button onClick={confirmBulkDelete} className="rounded-full bg-red-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-red-700 transition-colors">
             Delete {selectedIds.length} Candidates
           </button>
+        </div>
+      </Modal>
+      {/* ── Clear Supabase confirm modal ──────────────── */}
+      <Modal
+        isOpen={clearTarget !== null}
+        onClose={() => setClearTarget(null)}
+        title="Clear Supabase Data"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-red-700">
+            <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-[13px] font-semibold">This clears every candidate record</p>
+              <p className="mt-1 text-xs leading-4">
+                All {clearTarget} candidate record(s) leave the candidates list and move to the Recycle Bin. Jobs, appointments, tasks and documents are not touched.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setClearTarget(null)}
+              className="rounded-full border border-cream bg-white px-4 py-2 text-[13px] font-medium text-text-primary hover:bg-cream-warm transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmClearData}
+              disabled={clearing}
+              className="rounded-full bg-red-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-red-700 transition-colors disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {clearing ? 'Clearing…' : `Clear ${clearTarget} Records`}
+            </button>
+          </div>
         </div>
       </Modal>
     </Layout>

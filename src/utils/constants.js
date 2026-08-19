@@ -24,7 +24,7 @@ export const STAGE_COLORS = {
   Interview: 'bg-indigo-100 text-indigo-700',
   Assessment: 'bg-cyan-100 text-cyan-700',
   Shortlist: 'bg-teal-100 text-teal-700',
-  Offer: 'bg-green-100 text-green-700',
+  Offer: 'bg-purple-100 text-purple-700',
   'Contract Signing': 'bg-emerald-100 text-emerald-700',
   'Visa Processing': 'bg-orange-100 text-orange-700',
   Onboarding: 'bg-lime-100 text-lime-700',

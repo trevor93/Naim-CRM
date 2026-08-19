@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import useSearchQueryParam from '../hooks/useSearchQueryParam'
 import Layout from '../components/layout/Layout'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -64,7 +65,7 @@ export default function TasksPage() {
   const toastRef = useRef(toast)
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useSearchQueryParam()
   const [statusFilter, setStatusFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())

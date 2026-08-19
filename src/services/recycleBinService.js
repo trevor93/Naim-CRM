@@ -75,6 +75,34 @@ function writeLocalRecycleBin(items, storage = window.localStorage) {
   return normalized
 }
 
+/**
+ * Append candidate records to the local (demo-mode) Recycle Bin store.
+ *
+ * Supabase mode gets this for free: soft-deleted rows are what the Recycle Bin
+ * page reads. In demo mode the bin is a separate localStorage list, so deletes
+ * on the Candidates page have to push their records across explicitly.
+ */
+export function addLocalRecycleBinItems(records) {
+  const incoming = (Array.isArray(records) ? records : [records]).filter(Boolean)
+  if (!incoming.length) return readLocalRecycleBin()
+
+  const existing = readLocalRecycleBin()
+  const knownIds = new Set(existing.map((item) => item.id))
+  const additions = incoming
+    .filter((record) => !knownIds.has(record.id))
+    .map((record) => ({
+      id: record.id,
+      name: record.name || 'Unnamed candidate',
+      email: record.email || '',
+      phone: record.phone || '+000-000-0000',
+      type: 'candidate',
+      deleted_at: record.deleted_at || new Date().toISOString(),
+      deleted_by: 'by',
+    }))
+
+  return additions.length ? writeLocalRecycleBin([...additions, ...existing]) : existing
+}
+
 export async function loadRecycleBinItems() {
   if (!isSupabaseConfigured) return readLocalRecycleBin()
   const candidates = await getDeletedCandidates()

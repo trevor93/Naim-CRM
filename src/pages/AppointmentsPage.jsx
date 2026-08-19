@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import useSearchQueryParam from '../hooks/useSearchQueryParam'
 import Layout from '../components/layout/Layout'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -88,7 +89,7 @@ export default function AppointmentsPage() {
   const toastRef = useRef(toast)
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useSearchQueryParam()
   const [dateFilter, setDateFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [stageFilter, setStageFilter] = useState('')

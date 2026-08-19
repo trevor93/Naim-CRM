@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 export const CANDIDATE_STATUSES = [
   { label: 'Onboarding', dot: 'bg-blue-500', badge: 'bg-blue-100 text-blue-700' },
   { label: 'Interviewing', dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
-  { label: 'Offer', dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-600' },
+  { label: 'Offer', dot: 'bg-purple-500', badge: 'bg-purple-100 text-purple-700' },
   { label: 'Hired', dot: 'bg-green-500', badge: 'bg-green-100 text-green-700' },
   { label: 'Rejected', dot: 'bg-red-500', badge: 'bg-red-100 text-red-700' },
 ]

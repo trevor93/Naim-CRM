@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FileText, Loader2, Upload } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
-import DocumentsTabs from '../components/documents/DocumentsTabs'
+import DocumentsTabs, { DOCUMENT_TAB_IDS } from '../components/documents/DocumentsTabs'
 import CVIntegrationBanner from '../components/documents/CVIntegrationBanner'
 import CVDocumentSection from '../components/documents/CVDocumentSection'
 import CVDraftsSection from '../components/documents/CVDraftsSection'
@@ -108,7 +108,12 @@ function triggerTextDownload(draft) {
 export default function DocumentsPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const [activeTab, setActiveTab] = useState('cvs')
+  const [searchParams] = useSearchParams()
+  // Global search links in as /documents?tab=<section>, so open that tab.
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = searchParams.get('tab')
+    return DOCUMENT_TAB_IDS.includes(requested) ? requested : 'cvs'
+  })
   const [builderCVs, setBuilderCVs] = useState([])
   const [uploadedCVs, setUploadedCVs] = useState([])
   const [drafts, setDrafts] = useState([])

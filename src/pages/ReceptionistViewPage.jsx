@@ -27,7 +27,7 @@ const QUICK_ACTIONS = [
 const CANDIDATE_STATUSES = [
   { value: 'Onboarding', dotClass: 'bg-blue-400', badgeClass: 'border border-blue-200 bg-blue-100 text-blue-700' },
   { value: 'Interviewing', dotClass: 'bg-yellow-400', badgeClass: 'border border-yellow-200 bg-yellow-100 text-yellow-700' },
-  { value: 'Offer', dotClass: 'bg-gray-400', badgeClass: 'border border-gray-200 bg-gray-100 text-gray-700' },
+  { value: 'Offer', dotClass: 'bg-purple-500', badgeClass: 'border border-purple-200 bg-purple-100 text-purple-700' },
   { value: 'Hired', dotClass: 'bg-green-400', badgeClass: 'border border-green-200 bg-green-100 text-green-700' },
   { value: 'Rejected', dotClass: 'bg-red-400', badgeClass: 'border border-red-200 bg-red-100 text-red-700' },
 ]

@@ -23,6 +23,18 @@ export async function getCandidates({ search, stage, country, status, page = 1, 
   return { data, count, page, pageSize }
 }
 
+export async function getAllActiveCandidates() {
+  const { data, error } = await supabase.from(TABLE).select('*').is('deleted_at', null).order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function countActiveCandidates() {
+  const { count, error } = await supabase.from(TABLE).select('id', { count: 'exact', head: true }).is('deleted_at', null)
+  if (error) throw error
+  return count || 0
+}
+
 export async function getCandidateById(id) {
   const { data, error } = await supabase.from(TABLE).select('*').eq('id', id).single()
   if (error) throw error
@@ -54,6 +66,19 @@ export async function bulkUpdateCandidates(ids, updates) {
 export async function bulkDeleteCandidates(ids) {
   const { error } = await supabase.from(TABLE).update({ deleted_at: new Date().toISOString() }).in('id', ids)
   if (error) throw error
+}
+
+// Soft-deletes every candidate still in the list. Used by the Candidates page
+// "Clear Supabase" action; records land in the Recycle Bin rather than being
+// destroyed, so an accidental click stays recoverable.
+export async function clearAllCandidates() {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ deleted_at: new Date().toISOString() })
+    .is('deleted_at', null)
+    .select('id')
+  if (error) throw error
+  return data?.length || 0
 }
 
 export async function autoDeleteCompletedCandidates(cutoff) {
