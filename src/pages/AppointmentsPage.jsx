@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import useSearchQueryParam from '../hooks/useSearchQueryParam'
 import Layout from '../components/layout/Layout'
 import Button from '../components/ui/Button'
@@ -13,15 +14,35 @@ import { isSupabaseConfigured } from '../supabase/client'
 import { useToast } from '../contexts/ToastContext'
 import {
   AlertCircle, CalendarDays, CheckCircle2, Clock3, Edit3, Mail, MapPin,
-  Phone, Plus, Search, Trash2, UserRound,
+  Phone, Plus, Save, Search, Trash2, UserRound,
 } from 'lucide-react'
 
 const STATUSES = ['Scheduled', 'Completed', 'Cancelled', 'Rescheduled', 'No Show']
 const PERSISTED_STATUSES = ['Scheduled', 'Completed', 'Cancelled', 'Rescheduled']
 const STAGES = ['Onboarding', 'Interviewing', 'Offer', 'Hired', 'Rejected']
 const TYPES = ['Initial Interview', 'Follow-up', 'Medical', 'Document Collection', 'Visa', 'Other']
+const LOCATIONS = [
+  'Naim Investments Office - Room A',
+  'Naim Investments Office - Room B',
+  'Naim Investments Reception',
+  'Approved Medical Center',
+  'Embassy / Consulate',
+  'Online (Video Call)',
+  'Phone Call',
+]
+// Every field the schedule form marks with an asterisk.
+const REQUIRED_FIELDS = [
+  ['title', 'Candidate name is required'],
+  ['candidateEmail', 'Candidate email is required'],
+  ['candidatePhone', 'Candidate phone is required'],
+  ['type', 'Appointment type is required'],
+  ['date', 'Date is required'],
+  ['time', 'Time is required'],
+  ['location', 'Location is required'],
+  ['coordinator', 'Interviewer is required'],
+]
 const EMPTY_FORM = {
-  title: '', type: 'Initial Interview', candidate_id: '', date: '', time: '', location: '',
+  title: '', type: '', candidate_id: '', date: '', time: '', location: '',
   coordinator: '', candidateEmail: '', candidatePhone: '', stage: 'Interviewing',
   status: 'Scheduled', notes: '',
 }
@@ -87,6 +108,7 @@ function PillSelect({ label, value, options, classes, onChange }) {
 export default function AppointmentsPage() {
   const toast = useToast()
   const toastRef = useRef(toast)
+  const [params, setParams] = useSearchParams()
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useSearchQueryParam()
@@ -118,6 +140,18 @@ export default function AppointmentsPage() {
     loadAppointments()
   }, [])
 
+  // Other pages link here to book: the Receptionist view sends `?add=1`, the
+  // Associates quick actions send `?action=book`. Either one opens the schedule
+  // form straight away, then the param is dropped so a reload does not reopen it.
+  useEffect(() => {
+    if (params.get('add') !== '1' && params.get('action') !== 'book') return
+    openForm()
+    const next = new URLSearchParams(params)
+    next.delete('add')
+    next.delete('action')
+    setParams(next, { replace: true })
+  }, [params, setParams])
+
   const counts = useMemo(() => {
     const today = new Date().toISOString().split('T')[0]
     return {
@@ -144,11 +178,15 @@ export default function AppointmentsPage() {
     setShowForm(true)
   }
 
+  function setField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }))
+    setErrors((current) => current[field] ? { ...current, [field]: '' } : current)
+  }
+
   async function saveAppointment(event) {
     event.preventDefault()
     const nextErrors = {}
-    if (!form.title.trim()) nextErrors.title = 'Candidate or title is required'
-    if (!form.date) nextErrors.date = 'Date is required'
+    REQUIRED_FIELDS.forEach(([field, message]) => { if (!`${form[field] ?? ''}`.trim()) nextErrors[field] = message })
     if (Object.keys(nextErrors).length) { setErrors(nextErrors); return }
     if (isSupabaseConfigured && !PERSISTED_STATUSES.includes(form.status)) {
       toast.error('No Show is not supported by the current appointment database schema')
@@ -213,6 +251,10 @@ export default function AppointmentsPage() {
     { label: 'Completed', value: counts.completed, icon: CheckCircle2, color: 'text-green-600' },
     { label: 'No Shows', value: counts.noShows, icon: AlertCircle, color: 'text-orange-600' },
   ]
+
+  // Appointments saved before Location became a dropdown may hold free text; keeping
+  // it in the option list stops the select from silently blanking it on edit.
+  const locationOptions = form.location && !LOCATIONS.includes(form.location) ? [form.location, ...LOCATIONS] : LOCATIONS
 
   const AppointmentControls = ({ appointment }) => (
     <>
@@ -286,16 +328,24 @@ export default function AppointmentsPage() {
         </section>
       </div>
 
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingAppointment ? 'Edit Appointment' : 'Schedule Appointment'}>
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingAppointment ? 'Edit Appointment' : 'Schedule New Appointment'} size="lg">
         <form onSubmit={saveAppointment} className="space-y-4" noValidate>
-          <Input label="Candidate or Title" aria-label="Candidate or Title" value={form.title} error={errors.title} onChange={(event) => { setForm({ ...form, title: event.target.value }); if (event.target.value.trim()) setErrors({ ...errors, title: '' }) }} />
-          <Select label="Appointment Type" aria-label="Appointment Type" value={form.type} options={TYPES} onChange={(event) => setForm({ ...form, type: event.target.value })} />
-          <div className="grid gap-3 sm:grid-cols-2"><Input label="Date" aria-label="Date" type="date" value={form.date} error={errors.date} onChange={(event) => { setForm({ ...form, date: event.target.value }); if (event.target.value) setErrors({ ...errors, date: '' }) }} /><Input label="Time" aria-label="Time" type="time" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} /></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Input label="Location" aria-label="Location" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /><Input label="Coordinator" aria-label="Coordinator" value={form.coordinator} onChange={(event) => setForm({ ...form, coordinator: event.target.value })} /></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Input label="Email" aria-label="Email" type="email" value={form.candidateEmail} onChange={(event) => setForm({ ...form, candidateEmail: event.target.value })} /><Input label="Phone" aria-label="Phone" value={form.candidatePhone} onChange={(event) => setForm({ ...form, candidatePhone: event.target.value })} /></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Select label="Stage" aria-label="Stage" value={form.stage} options={STAGES} onChange={(event) => setForm({ ...form, stage: event.target.value })} /><Select label="Status" aria-label="Status" value={form.status} options={STATUSES} onChange={(event) => setForm({ ...form, status: event.target.value })} /></div>
-          <Textarea label="Notes" aria-label="Notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
-          <div className="flex justify-end gap-3 border-t border-cream pt-4"><Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button><Button type="submit">{editingAppointment ? 'Update' : 'Schedule'}</Button></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Candidate Name *" aria-label="Candidate Name" value={form.title} error={errors.title} onChange={(event) => setField('title', event.target.value)} />
+            <Input label="Candidate Email *" aria-label="Candidate Email" type="email" value={form.candidateEmail} error={errors.candidateEmail} onChange={(event) => setField('candidateEmail', event.target.value)} />
+            <Input label="Candidate Phone *" aria-label="Candidate Phone" value={form.candidatePhone} error={errors.candidatePhone} onChange={(event) => setField('candidatePhone', event.target.value)} />
+            <Select label="Appointment Type *" aria-label="Appointment Type" placeholder="Select type" value={form.type} options={TYPES} error={errors.type} onChange={(event) => setField('type', event.target.value)} />
+            <Input label="Date *" aria-label="Date" type="date" value={form.date} error={errors.date} onChange={(event) => setField('date', event.target.value)} />
+            <Input label="Time *" aria-label="Time" type="time" value={form.time} error={errors.time} onChange={(event) => setField('time', event.target.value)} />
+            <Select label="Location *" aria-label="Location" placeholder="Select location" value={form.location} options={locationOptions} error={errors.location} onChange={(event) => setField('location', event.target.value)} />
+            <Input label="Interviewer *" aria-label="Interviewer" placeholder="Name of interviewer" value={form.coordinator} error={errors.coordinator} onChange={(event) => setField('coordinator', event.target.value)} />
+            <Select label="Candidate Stage" aria-label="Candidate Stage" value={form.stage} options={STAGES} onChange={(event) => setField('stage', event.target.value)} />
+            {/* The template has no Status field — new appointments start Scheduled and the
+                row pill changes it later — but editing an existing one keeps the control. */}
+            {editingAppointment && <Select label="Status" aria-label="Status" value={form.status} options={STATUSES} onChange={(event) => setField('status', event.target.value)} />}
+          </div>
+          <Textarea label="Notes" aria-label="Notes" placeholder="Additional notes about the appointment..." value={form.notes} onChange={(event) => setField('notes', event.target.value)} />
+          <div className="flex justify-end gap-3 border-t border-cream pt-4"><Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button><Button type="submit"><Save className="h-4 w-4" aria-hidden="true" />{editingAppointment ? 'Update Appointment' : 'Schedule Appointment'}</Button></div>
         </form>
       </Modal>
     </Layout>

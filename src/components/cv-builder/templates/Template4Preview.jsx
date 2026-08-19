@@ -44,7 +44,7 @@ function Letterhead({ draft, arabic = false }) {
   return (
     <header className="cv-t4-letterhead">
       <div className="cv-t4-logo">
-        <img src="/assets/naim-agency-logo.webp" alt="Naim Agency logo" />
+        <img src="/assets/naim-agency-logo.png" alt="Naim Agency logo" />
       </div>
       <div className="cv-t4-heading-block">
         <h2>{arabic ? valueOrBlank(draft.companyNameArabic, 'شركة نعيم للاستثمارات المحدودة') : 'NAIM INVESTMENTS LIMITED'}</h2>

@@ -9,7 +9,7 @@ export default function Layout({ title, children }) {
     <div className="min-h-screen bg-cream-light">
       <Sidebar expanded={sidebarExpanded} onToggle={() => setSidebarExpanded(!sidebarExpanded)} />
 
-      <div className={`transition-all duration-300 ${sidebarExpanded ? 'ml-52' : 'ml-14'}`}>
+      <div className={`transition-all duration-300 ${sidebarExpanded ? 'ml-64' : 'ml-14'}`}>
         <Header title={title} />
         <main className="p-6">{children}</main>
       </div>

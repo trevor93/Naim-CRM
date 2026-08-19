@@ -62,7 +62,7 @@ export default function Template3Preview({ draft }) {
       >
         <header className="cv-t3-letterhead">
           <div className="cv-t3-logo-slot">
-            <img src="/assets/naim-agency-logo.webp" alt="Naim Agency logo" />
+            <img src="/assets/naim-agency-logo.png" alt="Naim Agency logo" />
           </div>
           <div className="cv-t3-brand">
             <h2>Naim Investments</h2>

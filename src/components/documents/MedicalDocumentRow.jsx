@@ -1,4 +1,5 @@
-import { Download, Eye, FileImage, FileText, SquarePen, Trash2 } from 'lucide-react'
+import { FileImage, FileText } from 'lucide-react'
+import DocumentRowActions from './DocumentRowActions'
 
 export default function MedicalDocumentRow({ document, index, selected, onSelect, onPreview, onEdit, onDownload, onDelete }) {
   const ImageIcon = document.mime_type?.startsWith('image/') ? FileImage : FileText
@@ -16,15 +17,16 @@ export default function MedicalDocumentRow({ document, index, selected, onSelect
           <p className="mt-0.5 break-words text-[11px] leading-4 text-text-secondary">{document.description}</p>
         </div>
       </div>
-      <div className="ml-7 flex items-center justify-end gap-3 sm:ml-0">
-        {[
-          [Eye, 'Preview', onPreview], [SquarePen, 'Edit', onEdit], [Download, 'Download', onDownload], [Trash2, 'Delete', onDelete],
-        ].map(([Icon, label, handler]) => (
-          <button key={label} type="button" onClick={() => handler(document)} aria-label={`${label} ${document.file_name}`} title={label} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-900 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </button>
-        ))}
-      </div>
+      <DocumentRowActions
+        record={document}
+        name={document.file_name}
+        tone="plain"
+        className="ml-7 flex items-center justify-end gap-3 sm:ml-0"
+        onPreview={onPreview}
+        onEdit={onEdit}
+        onDownload={onDownload}
+        onDelete={onDelete}
+      />
     </article>
   )
 }

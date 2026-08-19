@@ -9,23 +9,19 @@ const DOCUMENT_TABS = [
 
 export const DOCUMENT_TAB_IDS = DOCUMENT_TABS.map(([id]) => id)
 
-export default function DocumentsTabs({ activeTab = 'cvs', onChange, onUnavailable }) {
+export default function DocumentsTabs({ activeTab = 'cvs', onChange }) {
   return (
     <nav aria-label="Document categories" className="overflow-x-auto border-b border-gray-200">
       <div className="flex min-w-max">
         {DOCUMENT_TABS.map(([id, label]) => {
           const active = id === activeTab
-          const available = id === 'cvs' || id === 'medical-reports' || id === 'contracts' || id === 'licenses-certifications' || id === 'adverts-marketing' || id === 'reports'
 
           return (
             <button
               key={id}
               type="button"
               aria-current={active ? 'page' : undefined}
-              onClick={() => {
-                if (available) onChange(id)
-                else onUnavailable(label)
-              }}
+              onClick={() => onChange(id)}
               className={`-mb-px border-b-2 px-5 py-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
                 active
                   ? 'border-gold-light bg-[#faf8f2] text-primary'

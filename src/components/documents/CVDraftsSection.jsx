@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { Copy, FolderOpen } from 'lucide-react'
 import CVUploadButton from './CVUploadButton'
 import CVDraftRow from './CVDraftRow'
+import DocumentBulkActions from './DocumentBulkActions'
 
 export default function CVDraftsSection({
   drafts = [],
@@ -14,6 +15,8 @@ export default function CVDraftsSection({
   onEdit,
   onDownload,
   onDelete,
+  onDownloadSelected,
+  onDeleteSelected,
 }) {
   const selectAllRef = useRef(null)
   const selectedCount = drafts.reduce((count, draft) => count + (selectedIds.has(draft.id) ? 1 : 0), 0)
@@ -55,6 +58,8 @@ export default function CVDraftsSection({
           <CVUploadButton camera onFile={onCamera} />
         </div>
       </div>
+
+      <DocumentBulkActions count={selectedCount} noun="draft" onDownload={onDownloadSelected} onDelete={onDeleteSelected} />
 
       {drafts.length === 0 ? (
         <div className="flex min-h-44 flex-col items-center justify-center py-7 text-center">

@@ -1,9 +1,10 @@
 import { useLayoutEffect, useRef } from 'react'
 import { FolderOpen } from 'lucide-react'
 import CVUploadButton from './CVUploadButton'
+import DocumentBulkActions from './DocumentBulkActions'
 import MedicalDocumentRow from './MedicalDocumentRow'
 
-export default function MedicalDocumentSection({ section, documents, selectedIds, onToggle, onToggleAll, onUpload, onCamera, onPreview, onEdit, onDownload, onDelete }) {
+export default function MedicalDocumentSection({ section, documents, selectedIds, onToggle, onToggleAll, onUpload, onCamera, onPreview, onEdit, onDownload, onDelete, onDownloadSelected, onDeleteSelected }) {
   const selectAllRef = useRef(null)
   const selectedCount = documents.filter((document) => selectedIds.has(document.id)).length
   const allSelected = documents.length > 0 && selectedCount === documents.length
@@ -33,6 +34,7 @@ export default function MedicalDocumentSection({ section, documents, selectedIds
           <CVUploadButton camera onFile={onCamera} />
         </div>
       </div>
+      <DocumentBulkActions count={selectedCount} noun="document" onDownload={onDownloadSelected} onDelete={onDeleteSelected} />
       {documents.length === 0 ? (
         <div className="flex min-h-[205px] flex-col items-center justify-center text-center">
           <FolderOpen className="h-11 w-11 text-gray-300" aria-hidden="true" />

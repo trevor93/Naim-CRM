@@ -8,7 +8,7 @@ export const REPORT_SECTIONS = [
   { id: 'analytics', type: 'Analytics Report', title: 'Analytics Reports', subtitle: 'Data analytics and business intelligence reports', icon: FileBarChart },
 ]
 
-export default function ReportsPanel({ documentsBySection, selectedBySection, onToggle, onToggleAll, onUpload, onPreview, onEdit, onDownload, onDelete }) {
+export default function ReportsPanel({ documentsBySection, selectedBySection, onToggle, onToggleAll, onUpload, onPreview, onEdit, onDownload, onDelete, onDownloadSelected, onDeleteSelected }) {
   return (
     <div className="mt-6 space-y-6">
       <aside className="rounded-lg border border-green-200 bg-green-50 px-4 py-5 text-green-900">
@@ -16,7 +16,7 @@ export default function ReportsPanel({ documentsBySection, selectedBySection, on
         <p className="mt-2 text-xs leading-6 text-green-700">Store and manage all business reports including financial statements, performance metrics, compliance documents, and analytics reports. Maintain organized records for audits and strategic planning.</p>
       </aside>
       {REPORT_SECTIONS.map((section) => (
-        <MedicalDocumentSection key={section.id} section={section} documents={documentsBySection[section.id] || []} selectedIds={selectedBySection[section.id] || new Set()} onToggle={(id) => onToggle(section.id, id)} onToggleAll={() => onToggleAll(section.id)} onUpload={(file) => onUpload(file, section, 'manual')} onCamera={(file) => onUpload(file, section, 'camera')} onPreview={onPreview} onEdit={onEdit} onDownload={onDownload} onDelete={onDelete} />
+        <MedicalDocumentSection key={section.id} section={section} documents={documentsBySection[section.id] || []} selectedIds={selectedBySection[section.id] || new Set()} onToggle={(id) => onToggle(section.id, id)} onToggleAll={() => onToggleAll(section.id)} onUpload={(file) => onUpload(file, section, 'manual')} onCamera={(file) => onUpload(file, section, 'camera')} onPreview={onPreview} onEdit={onEdit} onDownload={onDownload} onDelete={onDelete} onDownloadSelected={() => onDownloadSelected(section.id)} onDeleteSelected={() => onDeleteSelected(section.id)} />
       ))}
     </div>
   )

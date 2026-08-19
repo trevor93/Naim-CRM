@@ -8,11 +8,11 @@ export const CONTRACT_SECTIONS = [
   { id: 'other', type: 'Other Contract', title: 'Other Contracts', subtitle: 'Miscellaneous contracts and legal agreements', icon: Folder },
 ]
 
-export default function ContractsPanel({ documentsBySection, selectedBySection, onToggle, onToggleAll, onUpload, onPreview, onEdit, onDownload, onDelete }) {
+export default function ContractsPanel({ documentsBySection, selectedBySection, onToggle, onToggleAll, onUpload, onPreview, onEdit, onDownload, onDelete, onDownloadSelected, onDeleteSelected }) {
   return (
     <div className="mt-6 space-y-6">
       {CONTRACT_SECTIONS.map((section) => (
-        <MedicalDocumentSection key={section.id} section={section} documents={documentsBySection[section.id] || []} selectedIds={selectedBySection[section.id] || new Set()} onToggle={(id) => onToggle(section.id, id)} onToggleAll={() => onToggleAll(section.id)} onUpload={(file) => onUpload(file, section, 'manual')} onCamera={(file) => onUpload(file, section, 'camera')} onPreview={onPreview} onEdit={onEdit} onDownload={onDownload} onDelete={onDelete} />
+        <MedicalDocumentSection key={section.id} section={section} documents={documentsBySection[section.id] || []} selectedIds={selectedBySection[section.id] || new Set()} onToggle={(id) => onToggle(section.id, id)} onToggleAll={() => onToggleAll(section.id)} onUpload={(file) => onUpload(file, section, 'manual')} onCamera={(file) => onUpload(file, section, 'camera')} onPreview={onPreview} onEdit={onEdit} onDownload={onDownload} onDelete={onDelete} onDownloadSelected={() => onDownloadSelected(section.id)} onDeleteSelected={() => onDeleteSelected(section.id)} />
       ))}
     </div>
   )

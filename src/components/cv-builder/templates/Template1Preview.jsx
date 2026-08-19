@@ -60,7 +60,7 @@ export default function Template1Preview({ draft }) {
       >
         <header className="cv-t1-header">
           <div className="cv-t1-logo">
-            <img src="/assets/naim-agency-logo.webp" alt="Naim Agency logo" />
+            <img src="/assets/naim-agency-logo.png" alt="Naim Agency logo" />
           </div>
           <h2>NAIM INVESTMENT LIMITED</h2>
           <div>

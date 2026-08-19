@@ -11,14 +11,15 @@ import StatusMenu from '../components/receptionist/StatusMenu'
 import { useToast } from '../contexts/ToastContext'
 import { isSupabaseConfigured } from '../supabase/client'
 import { getCandidates, updateCandidate } from '../services/candidateService'
-import { getJobs } from '../services/jobService'
+import { getJobs, updateJob } from '../services/jobService'
 import { getTasks, getTaskCounts, updateTask } from '../services/taskService'
 import { getAppointments } from '../services/appointmentService'
 import { demoCandidates, demoJobs, demoTasks, demoTotalCandidates } from '../services/demoData'
+import { TASK_STATUS_OPTIONS } from '../utils/taskOptions'
 
 const QUICK_ACTIONS = [
   { label: 'Create CV', to: '/cv-builder', icon: UserRound },
-  { label: 'Add Candidate', to: '/candidates?add=1', icon: UserRoundPlus },
+  { label: 'Add Candidate', to: '/cv-builder', icon: UserRoundPlus },
   { label: 'View Candidate', to: '/candidates', icon: Search },
   { label: 'Schedule Appointment', to: '/appointments?add=1', icon: CalendarPlus },
   { label: 'View Tasks', to: '/tasks', icon: Eye },
@@ -32,18 +33,23 @@ const CANDIDATE_STATUSES = [
   { value: 'Rejected', dotClass: 'bg-red-400', badgeClass: 'border border-red-200 bg-red-100 text-red-700' },
 ]
 
-const TASK_STATUSES = [
-  { value: 'Pending', dotClass: 'bg-yellow-300', badgeClass: 'border border-yellow-200 bg-yellow-50 text-yellow-700' },
-  { value: 'In Progress', dotClass: 'bg-blue-300', badgeClass: 'border border-blue-200 bg-blue-50 text-blue-700' },
-  { value: 'Completed', dotClass: 'bg-green-300', badgeClass: 'border border-green-200 bg-green-50 text-green-700' },
-  { value: 'Overdue', dotClass: 'bg-red-300', badgeClass: 'border border-red-200 bg-red-50 text-red-700' },
-]
+// Reuses the Associates task colours so the small solid dots stay identical
+// wherever a task status is picked.
+const TASK_STATUSES = TASK_STATUS_OPTIONS.map(({ label, dot, badge }) => ({ value: label, dotClass: dot, badgeClass: `border ${badge}` }))
+// The filter spells Completed out the way the template does; the stored value is unchanged.
+const TASK_FILTER_LABELS = { Completed: 'Done (Completed)' }
 
 const JOB_STATUS_STYLES = {
   Active: 'border border-green-200 bg-green-50 text-green-700',
   Closed: 'border border-gray-200 bg-gray-100 text-gray-700',
   Draft: 'border border-slate-200 bg-slate-100 text-slate-700',
 }
+
+const JOB_STATUSES = [
+  { value: 'Active', dotClass: 'bg-green-500' },
+  { value: 'Closed', dotClass: 'bg-gray-400' },
+  { value: 'Draft', dotClass: 'bg-yellow-400' },
+].map((status) => ({ ...status, badgeClass: JOB_STATUS_STYLES[status.value] }))
 
 function initials(name = '') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase() || '?'
@@ -131,6 +137,18 @@ export default function ReceptionistViewPage() {
     } catch {
       setCandidates(previous)
       toast.error('Failed to update candidate status')
+    }
+  }
+
+  async function changeJobStatus(jobId, value) {
+    const previous = jobs
+    setJobs((current) => current.map((job) => job.id === jobId ? { ...job, status: value } : job))
+    if (!isSupabaseConfigured) return
+    try {
+      await updateJob(jobId, { status: value })
+    } catch {
+      setJobs(previous)
+      toast.error('Failed to update job status')
     }
   }
 
@@ -231,7 +249,7 @@ export default function ReceptionistViewPage() {
                   <p className="truncate text-xs text-text-secondary">{job.company || 'N/A'} • {job.location || 'N/A'} • {job.type || 'N/A'}</p>
                   <p className="truncate text-xs text-text-secondary">{job.salary_min === job.salary_max ? `${job.salary_min || 'N/A'} ${job.currency || ''}` : `${job.salary_min || 'N/A'} - ${job.salary_max || 'N/A'} ${job.currency || ''}`} • Posted {job.posted_date ? new Date(job.posted_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status] || 'border border-gray-200 bg-gray-100 text-gray-700'}`}>{job.status || 'Draft'}</span>
+                <StatusMenu ariaLabel={`Job status for ${job.title}`} value={job.status || 'Draft'} options={JOB_STATUSES} onChange={(value) => changeJobStatus(job.id, value)} />
               </article>
             ))}
           </div>
@@ -246,7 +264,7 @@ export default function ReceptionistViewPage() {
             <label className="sr-only" htmlFor="task-filter">Filter tasks by status</label>
             <select id="task-filter" aria-label="Filter tasks by status" value={taskFilter} onChange={(event) => setTaskFilter(event.target.value)} className="min-w-44 rounded-lg border border-transparent bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none">
               <option value="">All Statuses</option>
-              {TASK_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.value}</option>)}
+              {TASK_STATUSES.map((status) => <option key={status.value} value={status.value}>{TASK_FILTER_LABELS[status.value] || status.value}</option>)}
             </select>
           </div>
           <div className="space-y-4">

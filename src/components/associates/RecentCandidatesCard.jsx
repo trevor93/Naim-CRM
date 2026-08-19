@@ -1,4 +1,6 @@
 import { ArrowRight, UsersRound } from 'lucide-react'
+import DotSelect from '../ui/DotSelect'
+import { CANDIDATE_STATUSES } from '../candidates/StatusDropdown'
 
 export default function RecentCandidatesCard({ candidates, total, onViewAll, onStageChange }) {
   return (
@@ -18,9 +20,9 @@ export default function RecentCandidatesCard({ candidates, total, onViewAll, onS
                 <p className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-text-muted"><span>{candidate.email}</span><span>·</span><span>{candidate.phone}</span></p>
               </div>
             </div>
-            <select aria-label={`Stage for ${candidate.name} ${index + 1}`} value={candidate.stage} onChange={(event) => onStageChange(candidate.id, event.target.value)} className="h-7 self-end rounded-full border border-blue-200 bg-blue-50 px-3 text-[11px] text-blue-700 outline-none sm:self-start">
-              <option>Onboarding</option><option>Screening</option><option>Interview</option><option>Placed</option>
-            </select>
+            <div className="self-end sm:self-start">
+              <DotSelect label={`Stage for ${candidate.name} ${index + 1}`} value={candidate.stage} options={CANDIDATE_STATUSES} onChange={(stage) => onStageChange(candidate.id, stage)} menuClassName="w-36" className="border-transparent" />
+            </div>
           </article>
         ))}
       </div>

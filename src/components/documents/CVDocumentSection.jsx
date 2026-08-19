@@ -1,15 +1,7 @@
-import { FileText, FolderOpen } from 'lucide-react'
+import { FileImage, FileText, FolderOpen } from 'lucide-react'
+import { formatFileSize } from '../../services/documentsStore'
 import CVUploadButton from './CVUploadButton'
-
-function formatSize(bytes) {
-  if (bytes === null || bytes === undefined || bytes === '') return ''
-
-  const size = Number(bytes)
-  if (!Number.isFinite(size)) return String(bytes)
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
+import DocumentRowActions from './DocumentRowActions'
 
 export default function CVDocumentSection({
   id,
@@ -19,6 +11,10 @@ export default function CVDocumentSection({
   documents = [],
   onUpload,
   onCamera,
+  onPreview,
+  onEdit,
+  onDownload,
+  onDelete,
 }) {
   return (
     <section id={id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
@@ -47,23 +43,41 @@ export default function CVDocumentSection({
       ) : (
         <div className="mt-5 space-y-2">
           {documents.map((document, index) => {
-            const formattedSize = formatSize(document.file_size)
+            const name = document.file_name || document.name || 'CV document'
+            const isImage = document.mime_type?.startsWith('image/')
+            const RowIcon = isImage ? FileImage : FileText
+            const formattedSize = document.size || (document.file_size ? formatFileSize(document.file_size) : '')
 
             return (
               <div
-                key={document.id ?? document.file_path ?? `${document.file_name}-${index}`}
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3"
+                key={document.id ?? document.file_path ?? `${name}-${index}`}
+                className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3 sm:flex-row sm:items-center"
               >
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-primary shadow-sm ring-1 ring-cream">
-                  <FileText className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-medium text-text-primary">{document.file_name || document.name || 'CV document'}</p>
-                  <p className="mt-0.5 text-[11px] text-text-muted">
-                    {document.document_type || 'Resume/CV'}
-                    {formattedSize ? ` • ${formattedSize}` : ''}
-                  </p>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-primary shadow-sm ring-1 ring-cream">
+                    <RowIcon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-text-primary">{name}</p>
+                    <p className="mt-0.5 text-[11px] text-text-muted">
+                      {document.document_type || 'Resume/CV'}
+                      {formattedSize ? ` • ${formattedSize}` : ''}
+                      {document.uploadedAt ? ` • ${document.uploadedAt}` : ''}
+                    </p>
+                    {document.description && (
+                      <p className="mt-0.5 break-words text-[11px] leading-4 text-text-secondary">{document.description}</p>
+                    )}
+                  </div>
                 </div>
+                <DocumentRowActions
+                  record={document}
+                  name={name}
+                  className="flex items-center justify-end gap-1"
+                  onPreview={onPreview}
+                  onEdit={onEdit}
+                  onDownload={onDownload}
+                  onDelete={onDelete}
+                />
               </div>
             )
           })}

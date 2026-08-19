@@ -46,10 +46,12 @@ export async function archiveTasks(ids) {
   if (error) throw error
 }
 
+/** Hard-deletes completed tasks finished before `cutoff` and returns how many went. */
 export async function deleteCompletedTasksBefore(cutoff) {
-  if (!cutoff) return
-  const { error } = await supabase.from(TABLE).delete().eq('status', 'Completed').lt('completed_at', cutoff)
+  if (!cutoff) return 0
+  const { data, error } = await supabase.from(TABLE).delete().eq('status', 'Completed').lt('completed_at', cutoff).select('id')
   if (error) throw error
+  return data?.length || 0
 }
 
 export async function getTaskCounts() {

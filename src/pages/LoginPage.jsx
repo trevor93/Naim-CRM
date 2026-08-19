@@ -40,9 +40,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-cream-light via-beige to-cream p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-black shadow-lg sm:h-28 sm:w-28">
+          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center sm:h-28 sm:w-28">
             <img
-              src="/assets/naim-agency-logo.webp"
+              src="/assets/naim-agency-logo.png"
               alt="Naim Agency logo"
               className="h-full w-full object-contain"
             />
